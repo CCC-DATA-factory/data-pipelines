@@ -6,7 +6,7 @@ import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.TimeZone
 
-flowFile = session.get()
+
 if (!flowFile) return
 
 try {
