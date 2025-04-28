@@ -32,7 +32,7 @@ try {
     priceFlow = session.write(priceFlow, { _, outStream ->
         outStream.write(priceHistoryJson.getBytes(StandardCharsets.UTF_8))
     } as StreamCallback)
-    priceFlow = session.putAttribute(priceFlow, 'target_iceberg_table_name', 'bundles-price-history')
+    priceFlow = session.putAttribute(priceFlow, 'target_iceberg_table_name', 'bundles_price_history')
     session.transfer(priceFlow, REL_SUCCESS)
 
     // 5) Remove original
