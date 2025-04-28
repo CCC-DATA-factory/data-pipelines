@@ -24,7 +24,7 @@ try {
     bundleFlow = session.write(bundleFlow, { _, outStream ->
         outStream.write(bundleJson.getBytes(StandardCharsets.UTF_8))
     } as StreamCallback)
-    bundleFlow = session.putAttribute(bundleFlow, 'target_iceberg_table_name', 'aselpaydbtest_bundles')
+    bundleFlow = session.putAttribute(bundleFlow, 'target_iceberg_table_name', 'bundles')
     session.transfer(bundleFlow, REL_SUCCESS)
 
     // 4) Emit price history flowfile
@@ -32,7 +32,7 @@ try {
     priceFlow = session.write(priceFlow, { _, outStream ->
         outStream.write(priceHistoryJson.getBytes(StandardCharsets.UTF_8))
     } as StreamCallback)
-    priceFlow = session.putAttribute(priceFlow, 'target_iceberg_table_name', 'aselpay_bundles_price_history')
+    priceFlow = session.putAttribute(priceFlow, 'target_iceberg_table_name', 'bundles-price-history')
     session.transfer(priceFlow, REL_SUCCESS)
 
     // 5) Remove original
