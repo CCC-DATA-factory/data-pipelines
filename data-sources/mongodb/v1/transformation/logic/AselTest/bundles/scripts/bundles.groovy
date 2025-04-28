@@ -35,8 +35,7 @@ try {
     priceFlow = session.putAttribute(priceFlow, 'target_iceberg_table_name', 'bundles_price_history')
     session.transfer(priceFlow, REL_SUCCESS)
 
-    // 5) Remove original
-    session.remove(flowFile)
+   
 } catch (Exception e) {
     log.error('Error processing FlowFile', e)
     if (flowFile) {
