@@ -1,93 +1,155 @@
 { 
-    "collections":[ 
-    
-{
-    "database_name":"AselTest",
-    "collection_name":"admins"
-},
-{
-    "database_name":"AselTest",
-    "collection_name":"bundles"
-},
-{
-    "database_name":"AselTest",
-    "collection_name":"retailers"
-},
-{
-    "database_name":"AselTest",
-    "collection_name":"sims"
-},
-{
-    "database_name":"AselTest",
-    "collection_name":"sub-distributors"
-},
-{
-    "database_name":"AselTest",
-    "collection_name":"sub-wholesalers"
-},
-{
-    "database_name":"AselTest",
-    "collection_name":"superadmins"
-},
-{
-    "database_name":"AselTest",
-    "collection_name":"topupbundles"
-},
-{
-    "database_name":"AselTest",
-    "collection_name":"topuplights"
-},
-{
-    "database_name":"AselTest",
-    "collection_name":"transactions"
-},
-{
-    "database_name":"AselTest",
-    "collection_name":"users"
-},
-{
-    "database_name":"AselTest",
-    "collection_name":"wholesalers"
-},
-{
-  "database_name":"POSapp",
-  "collection_name":"activations"
-},
-{
-  "database_name":"POSapp",
-  "collection_name":"agents"
-},
-{
-  "database_name":"POSapp",
-  "collection_name":"contracts"
-},
-{
-  "database_name":"POSapp",
-  "collection_name":"packages"
-},
-{
-  "database_name":"POSapp",
-  "collection_name":"resellers"
-},
-{
-  "database_name":"POSapp",
-  "collection_name":"shops"
-},
-{
-  "database_name":"POSapp",
-  "collection_name":"users"
-},
-{
-  "database_name":"POSapp",
-  "collection_name":"portabilities"
-},
-{
-  "database_name":"POSapp",
-  "collection_name":"bopusers"
-},
-{
-  "database_name":"POSapp",
-  "collection_name":"regions"
-}],
+    "collections":[
+      {
+        "database_name": "AselTest",
+        "collection_name": "sub-wholesalers",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "transactions",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "portabilities",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "sub-distributors",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "admins",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "bundles",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "paiements",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "superadmins",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "wholesalers",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "topuplights",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "users",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "sims",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "retailers",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "topupbundles",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselTest",
+        "collection_name": "mvnos",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "users",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "contracts_updated",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "customers",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "packages",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "mvno_packages",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "customerverifications",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "AgentWithUsers",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "shops",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "mvnos",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "agents",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "contracts",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "resellers",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "activations",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "portabilities",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "POSapp",
+        "collection_name": "regions",
+        "Analysis_related": "False"
+      }
+    ],
 "last_update" : "2022-02-28T14:45:12.385+00:00"
 }

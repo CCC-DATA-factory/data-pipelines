@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "ResellerRecord",
+  "namespace": "POSapp",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "name", "type": ["null", "string"], "default": null },
+    { "name": "username", "type": ["null", "string"], "default": null },
+    { "name": "password", "type": ["null", "string"], "default": null },
+    { "name": "mvno", "type": ["null", "string"], "default": null },
+    { "name": "id", "type": ["null", "int"], "default": null }
+  ]
+}

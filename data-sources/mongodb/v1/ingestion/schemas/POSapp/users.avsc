@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "users",
+  "fields": [
+    { "name": "_id",                 "type": ["null", "string"],  "default": null },
+    { "name": "email_status",       "type": ["null", "string"],  "default": null },
+    { "name": "account_status",     "type": ["null", "string"],  "default": null },
+    { "name": "username",           "type": ["null", "string"],  "default": null },
+    { "name": "email",              "type": ["null", "string"],  "default": null },
+    { "name": "password",           "type": ["null", "string"],  "default": null },
+    { "name": "password_expiry_date","type": ["null", "string"], "default": null }, 
+    { "name": "franchiseRetailer",  "type": ["null", "boolean"], "default": null }
+  ]
+}

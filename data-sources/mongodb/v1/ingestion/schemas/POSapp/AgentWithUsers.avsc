@@ -1,0 +1,40 @@
+{
+  "type": "record",
+  "name": "AgentWithUsers",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+
+    {
+      "name": "user",
+      "type": ["null", {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "User",
+          "fields": [
+            { "name": "_id",                  "type": ["null", "string"], "default": null },
+            { "name": "email_status",         "type": ["null", "string"], "default": null },
+            { "name": "account_status",       "type": ["null", "string"], "default": null },
+            { "name": "username",             "type": ["null", "string"], "default": null },
+            { "name": "email",                "type": ["null", "string"], "default": null },
+            { "name": "password",             "type": ["null", "string"], "default": null },
+            { "name": "password_expiry_date", "type": ["null", "string"], "default": null },
+            { "name": "franchiseRetailer",    "type": ["null", "boolean"], "default": null }
+          ]
+        }
+      }],
+      "default": null
+    },
+
+    { "name": "first_name",  "type": ["null", "string"], "default": null },
+    { "name": "last_name",   "type": ["null", "string"], "default": null },
+    { "name": "cin",         "type": ["null", "string"], "default": null },
+    { "name": "phone",       "type": ["null", "string"], "default": null },
+    { "name": "stamp_path",  "type": ["null", "string"], "default": null },
+    { "name": "mvno",        "type": ["null", "string"], "default": null },
+    { "name": "reseller",    "type": ["null", "string"], "default": null },
+    { "name": "id",          "type": ["null", "int"],    "default": null },
+    { "name": "created_at",  "type": ["null", "string"], "default": null },
+    { "name": "shop_id",     "type": ["null", "string"], "default": null }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "type": "record",
+  "name": "SubDistributorRecord",
+  "namespace": "AselTest",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "user", "type": ["null", "string"], "default": null },
+    { "name": "subWholesaler", "type": ["null", "string"], "default": null },
+    {
+      "name": "balance",
+      "type": {
+        "type": "record",
+        "name": "Balance",
+        "fields": [
+          { "name": "amount", "type": "int" },
+          { "name": "unit", "type": "string" }
+        ]
+      }
+    },
+    {
+      "name": "totalTransactions",
+      "type": {
+        "type": "record",
+        "name": "TotalTransactions",
+        "fields": [
+          { "name": "amount", "type": "int" },
+          { "name": "unit", "type": "string" }
+        ]
+      }
+    },
+    {
+      "name": "totalPayments",
+      "type": {
+        "type": "record",
+        "name": "TotalPayments",
+        "fields": [
+          { "name": "amount", "type": "int" },
+          { "name": "unit", "type": "string" }
+        ]
+      }
+    },
+    {
+      "name": "unpaid",
+      "type": {
+        "type": "record",
+        "name": "Unpaid",
+        "fields": [
+          { "name": "amount", "type": "int" },
+          { "name": "unit", "type": "string" }
+        ]
+      }
+    }
+  ]
+}

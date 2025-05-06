@@ -1,0 +1,22 @@
+{
+  "type": "record",
+  "name": "Portability",
+  "namespace": "processed",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "sim_id", "type": "string" },
+    {
+      "name": "created_at",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    { "name": "agent_id", "type": "string" },
+    { "name": "old_number", "type": "string" },
+    { "name": "code_rio", "type": "string" },
+    { "name": "current_operator", "type": "string" },
+    { "name": "customer_id", "type": "string" },
+    { "name": "mvno_id", "type": "string" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "type": "record",
+  "name": "SimRecord",
+  "namespace": "AselTest",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "ICCID", "type": ["null", "string"], "default": null },
+    { "name": "SN", "type": ["null", "string"], "default": null },
+    { "name": "MSISDN", "type": ["null", "string"], "default": null },
+    { "name": "IMSI", "type": ["null", "string"], "default": null },
+    { "name": "mvno", "type": ["null", "string"], "default": null },
+    { "name": "status", "type": ["null", "string"], "default": null },
+    {
+      "name": "activation_date",
+      "type": ["null", "string"],
+      "default": null
+    }
+  ]
+}

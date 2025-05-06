@@ -1,0 +1,10 @@
+{
+  "type": "record",
+  "name": "MVNOPackageRecord",
+  "namespace": "POSapp",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "mvno", "type": ["null", "string"], "default": null },
+    { "name": "package", "type": ["null", "string"], "default": null }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "type": "record",
+  "name": "TopupLightRecord",
+  "namespace": "AselTest",
+  "fields": [
+    { "name": "_id", "type": "string" },
+    { "name": "MSISDN", "type": "string" },
+    { "name": "MVNO", "type": "string" },
+    { "name": "SN", "type": ["null", "string"], "default": null },
+    { "name": "createdAt", "type": ["null", "string"], "default": null },
+    {
+      "name": "reloadAmount",
+      "type": {
+        "type": "record",
+        "name": "ReloadAmount",
+        "fields": [
+          { "name": "amount", "type": "int" },
+          { "name": "unit", "type": "string" }
+        ]
+      }
+    },
+    { "name": "retailer", "type": ["null", "string"], "default": null },
+    { "name": "SIM", "type": ["null", "string"], "default": null },
+    { "name": "shopName", "type": ["null", "string"], "default": null }
+  ]
+}

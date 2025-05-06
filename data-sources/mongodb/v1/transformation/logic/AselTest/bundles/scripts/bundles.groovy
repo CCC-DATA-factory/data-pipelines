@@ -6,36 +6,94 @@ import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
 import java.util.TimeZone
 
-
 if (!flowFile) return
 
 try {
-    // 1) Read JSON input
+    // Read JSON input as array
     def jsonInput = new StringBuilder()
     session.read(flowFile, { inputStream ->
-        inputStream.withReader(StandardCharsets.UTF_8.name()) { reader -> reader.eachLine { jsonInput.append(it) } }
+        inputStream.withReader(StandardCharsets.UTF_8.name()) { reader -> 
+            jsonInput << reader.text 
+        }
     } as InputStreamCallback)
 
-    // 2) Process and obtain outputs
-    def (bundleJson, priceHistoryJson) = processBundle(jsonInput.toString())
+    def inputRecords = new JsonSlurper().parseText(jsonInput.toString())
+    
+    // Prepare output collections
+    def allBundles = []
+    def allPriceHistories = []
+    def failedRecords = []
 
-    // 3) Emit bundle flowfile
-    def bundleFlow = session.clone(flowFile)
-    bundleFlow = session.write(bundleFlow, { _, outStream ->
-        outStream.write(bundleJson.getBytes(StandardCharsets.UTF_8))
-    } as StreamCallback)
-    bundleFlow = session.putAttribute(bundleFlow, 'target_iceberg_table_name', 'bundles')
-    session.transfer(bundleFlow, REL_SUCCESS)
+    // Process each record individually
+    inputRecords.each { originalRecord ->
+        try {
+            // Process single record
+            def (bundleJson, priceHistoryJson) = processBundle(JsonOutput.toJson([originalRecord]))
+            
+            // Parse results
+            def bundle = new JsonSlurper().parseText(bundleJson)[0]
+            def priceHistory = new JsonSlurper().parseText(priceHistoryJson)
+            
+            allBundles << bundle
+            allPriceHistories.addAll(priceHistory)
+            
+        } catch (Exception e) {
+            // Collect failed record with error
+            failedRecords << [
+                record: originalRecord,
+                error: e.message
+            ]
+            log.error("Failed processing record: ${e.message}", e)
+        }
+    }
 
-    // 4) Emit price history flowfile
-    def priceFlow = session.clone(flowFile)
-    priceFlow = session.write(priceFlow, { _, outStream ->
-        outStream.write(priceHistoryJson.getBytes(StandardCharsets.UTF_8))
-    } as StreamCallback)
-    priceFlow = session.putAttribute(priceFlow, 'target_iceberg_table_name', 'bundles_price_history')
-    session.transfer(priceFlow, REL_SUCCESS)
+    // Define attributes to inherit from original FlowFile
+    def inheritedAttributes = [
+        'filename', 
+        'filepath',
+        'database_name',
+        'collection_name'
+    ]
 
-   
+    // Modified writeFlowFile with attribute handling
+    def writeFlowFile = { data, rel, tableName ->
+        if (data) {
+            // Create new FlowFile inheriting specific attributes
+            def newFF = session.create()
+            
+            // Copy specified attributes from original
+            inheritedAttributes.each { key ->
+                def value = flowFile.getAttribute(key)
+                if (value) newFF = session.putAttribute(newFF, key, value)
+            }
+            
+            // Add new attributes
+            def jsonData = JsonOutput.toJson(data)
+            def bytes = jsonData.getBytes(StandardCharsets.UTF_8)
+            
+            newFF = session.write(newFF, { outStream ->
+                outStream.write(bytes)
+            } as StreamCallback)
+            
+            // Add file size (calculated AFTER writing)
+            newFF = session.putAttribute(newFF, 'file.size', bytes.length.toString())
+            newFF = session.putAttribute(newFF, 'target_iceberg_table_name', tableName)
+            
+            session.transfer(newFF, rel)
+        }
+    }
+
+    // Emit successful records
+    writeFlowFile(allBundles, REL_SUCCESS, 'bundles')
+    writeFlowFile(allPriceHistories, REL_SUCCESS, 'bundles_price_history')
+    
+    // Emit failed records
+    if (failedRecords) {
+        writeFlowFile(failedRecords, REL_FAILURE, 'failed_records')
+    }
+
+    session.remove(flowFile)
+
 } catch (Exception e) {
     log.error('Error processing FlowFile', e)
     if (flowFile) {

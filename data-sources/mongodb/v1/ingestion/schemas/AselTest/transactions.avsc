@@ -1,0 +1,41 @@
+{
+  "type": "record",
+  "name": "TransactionRecord",
+  "namespace": "AselTest",
+  "fields": [
+    { "name": "_id", "type": "string" },
+    { "name": "level", "type": "int" },
+    { "name": "sender", "type": "string" },
+    { "name": "recipient", "type": "string" },
+    {
+      "name": "transactionAmount",
+      "type": {
+        "type": "record",
+        "name": "TransactionAmount",
+        "fields": [
+          { "name": "amount", "type": "int" },
+          { "name": "unit", "type": "string" }
+        ]
+      }
+    },
+    { "name": "createdAt", "type": "string" },
+    { "name": "status", "type": ["null", "string"], "default": null },
+    { "name": "accepted_At", "type": ["null", "string"], "default": null },
+    {
+      "name": "senderBalanceAfterTransaction",
+      "type": [
+        "null",
+        {
+          "type": "record",
+          "name": "SenderBalance",
+          "fields": [
+            { "name": "amount", "type": "double" },
+            { "name": "unit", "type": "string" }
+          ]
+        }
+      ],
+      "default": null
+    },
+    { "name": "rejected_At", "type": ["null", "string"], "default": null }
+  ]
+}

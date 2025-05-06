@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "TopupBundleRecord",
+  "namespace": "AselTest",
+  "fields": [
+    { "name": "_id", "type": "string" },
+    { "name": "retailer", "type": "string" },
+    { "name": "MSISDN", "type": "string" },
+    { "name": "bundle", "type": "string" },
+    { "name": "topupId", "type": "string" },
+    { "name": "shopName", "type": ["null", "string"], "default": null },
+    { "name": "createdAt", "type": ["null", "string"], "default": null },
+    { "name": "SIM", "type": ["null", "string"], "default": null },
+    { "name": "SN", "type": ["null", "string"], "default": null },
+    { "name": "MVNO", "type": ["null", "string"], "default": null }
+  ]
+}

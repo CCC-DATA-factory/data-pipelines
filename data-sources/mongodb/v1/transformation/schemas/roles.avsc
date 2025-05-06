@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "ProcessedRole",
+  "namespace": "processed",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "id_user", "type": "string" },
+    { "name": "role", "type": "string" },
+    {
+      "name": "parent_id",
+      "type": ["null", "string"],
+      "default": null
+    }
+  ]
+}

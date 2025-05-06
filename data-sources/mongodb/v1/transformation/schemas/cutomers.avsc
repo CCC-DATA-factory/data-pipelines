@@ -1,0 +1,28 @@
+{
+  "type": "record",
+  "name": "Customers",
+  "namespace": "processed",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "DOB", "type": ["null", "string"], "default": null },
+    { "name": "POB", "type": ["null", "string"], "default": null },
+    { "name": "address", "type": ["null", "string"], "default": null },
+    { "name": "arta_id", "type": ["null", "double"], "default": null },
+    { "name": "cin", "type": ["null", "string"], "default": null },
+    { "name": "cin_recto_path", "type": ["null", "string"], "default": null },
+    { "name": "cin_verso_path", "type": ["null", "string"], "default": null },
+    { "name": "city", "type": ["null", "string"], "default": null },
+    { "name": "creation_date", "type": ["null", "string"], "default": null },
+    { "name": "email", "type": ["null", "string"], "default": null },
+    { "name": "first_name", "type": ["null", "string"], "default": null },
+    { "name": "gender", "type": ["null", "string"], "default": null },
+    { "name": "issue_date", "type": ["null", "string"], "default": null },
+    { "name": "job", "type": ["null", "string"], "default": null },
+    { "name": "last_name", "type": ["null", "string"], "default": null },
+    { "name": "mvno_id", "type": ["null", "double"], "default": null },
+    { "name": "passport", "type": ["null", "string"], "default": null },
+    { "name": "passport_path", "type": ["null", "string"], "default": null },
+    { "name": "postal_code", "type": ["null", "string"], "default": null },
+    { "name": "region", "type": ["null", "string"], "default": null }
+  ]
+}

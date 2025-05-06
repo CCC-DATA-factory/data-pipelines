@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "MVNORecord",
+  "namespace": "POSapp",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "api_login", "type": ["null", "string"], "default": null },
+    { "name": "api_password", "type": ["null", "string"], "default": null },
+    { "name": "name", "type": ["null", "string"], "default": null },
+    { "name": "currency_id", "type": ["null", "int"], "default": null },
+    { "name": "id", "type": ["null", "int"], "default": null }
+  ]
+}

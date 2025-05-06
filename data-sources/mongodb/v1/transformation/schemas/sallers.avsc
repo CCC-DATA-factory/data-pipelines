@@ -1,0 +1,22 @@
+{
+  "type": "record",
+  "name": "Saller",
+  "namespace": "processed",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "name", "type": "string" },
+    { "name": "role", "type": "string" },
+    {
+      "name": "parent_id",
+      "type": ["null", "string"],
+      "default": null
+    },
+    {
+      "name": "joined_at",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    }
+  ]
+}

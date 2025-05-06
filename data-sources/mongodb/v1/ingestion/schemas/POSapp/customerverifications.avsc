@@ -1,0 +1,9 @@
+{
+  "type": "record",
+  "name": "customerverifications",
+  "fields": [
+    { "name": "_id",         "type": ["null", "string"], "default": null },
+    { "name": "status",      "type": ["null", "string"], "default": null },
+    { "name": "customer_id", "type": ["null", "string"], "default": null }
+  ]
+}

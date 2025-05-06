@@ -1,0 +1,74 @@
+{
+  "type": "record",
+  "name": "RetailerRecord",
+  "namespace": "AselTest",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "user", "type": ["null", "string"], "default": null },
+    {
+      "name": "balance",
+      "type": ["null", {
+        "type": "record",
+        "name": "Balance",
+        "fields": [
+          { "name": "amount", "type": ["null", "long", "float"], "default": null },
+          { "name": "unit", "type": ["null", "string"], "default": null }
+        ]
+      }],
+      "default": null
+    },
+    {
+      "name": "totalTransactions",
+      "type": ["null", {
+        "type": "record",
+        "name": "TotalTransactions",
+        "fields": [
+          { "name": "amount", "type": ["null", "long", "float"], "default": null },
+          { "name": "unit", "type": ["null", "string"], "default": null }
+        ]
+      }],
+      "default": null
+    },
+    {
+      "name": "totalPayments",
+      "type": ["null", {
+        "type": "record",
+        "name": "TotalPayments",
+        "fields": [
+          { "name": "amount", "type": ["null", "long", "string"], "default": null },
+          { "name": "unit", "type": ["null", "string"], "default": null }
+        ]
+      }],
+      "default": null
+    },
+    {
+      "name": "unpaid",
+      "type": ["null", {
+        "type": "record",
+        "name": "Unpaid",
+        "fields": [
+          { "name": "amount", "type": ["null", "long", "float"], "default": null },
+          { "name": "unit", "type": ["null", "string"], "default": null }
+        ]
+      }],
+      "default": null
+    },
+    {
+      "name": "reductionPercentage",
+      "type": ["null", "long", "string"],
+      "default": null
+    },
+    { "name": "wholesaler", "type": ["null", "string"], "default": null },
+    {
+      "name": "allowedBundlesByMVNO",
+      "type": ["null", {
+        "type": "array",
+        "items": "string"
+      }],
+      "default": null
+    },
+    { "name": "subWholesaler", "type": ["null", "string"], "default": null },
+    { "name": "subDistributor", "type": ["null", "string"], "default": null },
+    { "name": "subwholesaler", "type": ["null", "string"], "default": null }
+  ]
+}

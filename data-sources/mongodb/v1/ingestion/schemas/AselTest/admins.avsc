@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "AdminRecord",
+  "namespace": "AselTest",
+  "fields": [
+    {
+      "name": "_id",
+      "type": "string"
+    },
+    {
+      "name": "user",
+      "type": "string"
+    }
+  ]
+}

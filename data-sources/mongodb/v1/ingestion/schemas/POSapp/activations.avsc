@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "ActivationsRecord",
+  "namespace": "POSapp",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "SIM", "type": ["null", "string"], "default": null },
+    { "name": "completed", "type": ["null", "boolean"], "default": null },
+    { "name": "creation_date", "type": ["null", "string"], "default": null },
+    { "name": "package", "type": ["null", "string"], "default": null },
+    { "name": "customer", "type": ["null", "string"], "default": null },
+    { "name": "agent", "type": ["null", "string"], "default": null },
+    { "name": "mvno_id", "type": ["null", "int"], "default": null },
+    { "name": "shopName", "type": ["null", "string"], "default": null }
+  ]
+}

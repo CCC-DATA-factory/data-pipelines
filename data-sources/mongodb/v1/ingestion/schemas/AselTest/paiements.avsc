@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "PaiementRecord",
+  "namespace": "AselTest",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "commercial", "type": ["null", "string"], "default": null },
+    { "name": "franchise", "type": ["null", "string"], "default": null },
+    { "name": "transaction", "type": ["null", "string"], "default": null },
+    { "name": "amount", "type": ["null", "long", "double"], "default": null },
+    { "name": "createdAt", "type": ["null", "string"], "default": null }
+  ]
+}

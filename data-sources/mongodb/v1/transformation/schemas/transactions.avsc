@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "Transactions",
+  "namespace": "com.example",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "sender_id", "type": "string" },
+    { "name": "recipient_id", "type": "string" },
+    { "name": "transactionAmount", "type": "double" },
+    {
+      "name": "createdAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    }
+  ]
+}

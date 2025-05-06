@@ -1,0 +1,19 @@
+{
+  "type": "record",
+  "name": "contracts_updated",
+  "namespace": "POSapp",
+  "fields": [
+    { "name": "_id",            "type": ["null", "string"],  "default": null },
+    { "name": "creation_date", "type": ["null", "string"],  "default": null },
+    { "name": "activation",     "type": ["null", "string"],  "default": null },
+    { "name": "id",             "type": ["null", "string"],  "default": null },
+    { "name": "signature_path", "type": ["null", "string"],  "default": null },
+    { "name": "agent",          "type": ["null", "string"],  "default": null },
+    { "name": "pdf_path",       "type": ["null", "string"],  "default": null },
+    { "name": "MSISDN",         "type": ["null", "string"],  "default": null },
+    { "name": "SIM",            "type": ["null", "string"],  "default": null },
+    { "name": "arta_id",        "type": ["null", "string"],  "default": null },
+    { "name": "customer",       "type": ["null", "string"],  "default": null },
+    { "name": "mvno_id",        "type": ["null", "int"],     "default": null }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "type": "record",
+  "name": "Activation",
+  "namespace": "com.example",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "sim_id", "type": "string" },
+    { "name": "agent_id", "type": "string" },
+    { "name": "customer_id", "type": "string" },
+    { "name": "mvno_id", "type": "string" },
+    {
+      "name": "createdAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    { "name": "shopName", "type": "string" }
+  ]
+}

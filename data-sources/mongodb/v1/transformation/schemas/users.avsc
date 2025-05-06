@@ -1,0 +1,16 @@
+{
+  "type": "record",
+  "name": "ProcessedUser",
+  "namespace": "processed",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "name", "type": "string" },
+    {
+      "name": "joined_at",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    }
+  ]
+}

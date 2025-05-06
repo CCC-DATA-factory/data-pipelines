@@ -1,0 +1,21 @@
+{
+  "type": "record",
+  "name": "bundles",
+  "namespace": "processed",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "name", "type": "string" },
+    { "name": "bundleid", "type": "string" },
+    { "name": "data_amount_gb", "type": "double" },
+    { "name": "voice_amount_minutes", "type": "double" },
+    { "name": "sms_amount", "type": "int" },
+    { "name": "validity_days", "type": "int" },
+    {
+      "name": "createdat",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    }
+  ]
+}

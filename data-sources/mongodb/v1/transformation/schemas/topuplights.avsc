@@ -1,0 +1,20 @@
+{
+  "type": "record",
+  "name": "TopupLights",
+  "namespace": "com.example",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "retailer_id", "type": "string" },
+    { "name": "sim_id", "type": "string" },
+    { "name": "shopName", "type": "string" },
+    { "name": "mvno_id", "type": "string" },
+    {
+      "name": "createdAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    { "name": "amount", "type": "double" }
+  ]
+}

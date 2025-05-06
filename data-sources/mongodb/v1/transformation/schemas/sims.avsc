@@ -1,0 +1,21 @@
+{
+  "type": "record",
+  "name": "Sim",
+  "namespace": "com.example",
+  "fields": [
+    { "name": "id", "type": "string" },
+    { "name": "ICCID", "type": "string" },
+    { "name": "SN", "type": "string" },
+    { "name": "MSISDN", "type": "string" },
+    { "name": "IMSI", "type": "string" },
+    { "name": "mvno_id", "type": "string" },
+    {
+      "name": "activation_date",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    { "name": "customer_id", "type": "string" }
+  ]
+}

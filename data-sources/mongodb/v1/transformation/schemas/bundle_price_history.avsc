@@ -1,0 +1,24 @@
+{
+  "type": "record",
+  "name": "bundle_price_history",
+  "namespace": "processed",
+
+  "fields": [
+    { "name": "bundleid", "type": "string" },
+    { "name": "price", "type": "double" },
+    {
+      "name": "start_date",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "end_date",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+{
+  "type": "record",
+  "name": "BundleRecord",
+  "namespace": "AselTest",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "name", "type": ["null", "string"], "default": null },
+    {
+      "name": "content",
+      "type": [
+        "null",
+        {
+          "type": "record",
+          "name": "Content",
+          "fields": [
+            {
+              "name": "data",
+              "type": [
+                "null",
+                {
+                  "type": "record",
+                  "name": "Data",
+                  "fields": [
+                    { "name": "amount", "type": ["null", "long", "string"], "default": null },
+                    { "name": "unit", "type": ["null", "string"], "default": null }
+                  ]
+                }
+              ],
+              "default": null
+            },
+            {
+              "name": "voice",
+              "type": [
+                "null",
+                {
+                  "type": "record",
+                  "name": "Voice",
+                  "fields": [
+                    { "name": "amount", "type": ["null", "long"], "default": null },
+                    { "name": "unit", "type": ["null", "string"], "default": null }
+                  ]
+                }
+              ],
+              "default": null
+            },
+            {
+              "name": "sms",
+              "type": ["null", "long"],
+              "default": null
+            }
+          ]
+        }
+      ],
+      "default": null
+    },
+    {
+      "name": "price",
+      "type": [
+        "null",
+        {
+          "type": "record",
+          "name": "Price",
+          "fields": [
+            { "name": "amount", "type": ["null", "long", "double"], "default": null },
+            { "name": "unit", "type": ["null", "string"], "default": null }
+          ]
+        }
+      ],
+      "default": null
+    },
+    {
+      "name": "validity",
+      "type": [
+        "null",
+        {
+          "type": "record",
+          "name": "Validity",
+          "fields": [
+            { "name": "number", "type": ["null", "long"], "default": null },
+            { "name": "unit", "type": ["null", "string"], "default": null }
+          ]
+        }
+      ],
+      "default": null
+    },
+    { "name": "validity_start_date", "type": ["null", "string"], "default": null },
+    { "name": "validity_end_date", "type": ["null", "string"], "default": null },
+    { "name": "createdAt", "type": ["null", "string"], "default": null },
+    { "name": "bundleId", "type": ["null", "long"], "default": null },
+    { "name": "subBundleID", "type": ["null", "string"], "default": null },
+    {
+      "name": "price_history",
+      "type": [
+        "null",
+        {
+          "type": "array",
+          "items": {
+            "type": "record",
+            "name": "PriceHistory",
+            "fields": [
+              { "name": "price", "type": ["null", "long"], "default": null },
+              { "name": "date", "type": ["null", "string"], "default": null }
+            ]
+          }
+        }
+      ],
+      "default": null
+    }
+  ]
+}
