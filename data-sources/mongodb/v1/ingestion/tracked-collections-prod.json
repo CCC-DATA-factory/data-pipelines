@@ -13,7 +13,7 @@
       {
         "database_name": "AselPayAppDB",
         "collection_name": "portabilities",
-        "Analysis_related": "True"
+        "Analysis_related": "False"
       },
       {
         "database_name": "AselPayAppDB",
@@ -143,7 +143,7 @@
       {
         "database_name": "PosDEMODB",
         "collection_name": "portabilities",
-        "Analysis_related": "False"
+        "Analysis_related": "True"
       },
       {
         "database_name": "PosDEMODB",
