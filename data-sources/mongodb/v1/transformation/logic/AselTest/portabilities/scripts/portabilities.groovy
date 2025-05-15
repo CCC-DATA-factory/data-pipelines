@@ -3,7 +3,6 @@ import java.nio.charset.StandardCharsets
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 import java.time.*
-import java.time.format.DateTimeParseException
 import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.flowfile.FlowFile
 import org.apache.nifi.processor.Relationship
@@ -40,27 +39,21 @@ try {
 // Prepare lists
 List valid = []
 List invalid = []
-long nowMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
+ZoneId tunisZone = ZoneId.of("Africa/Tunis")
+long nowMillis = ZonedDateTime.now(tunisZone).toInstant().toEpochMilli()
 
 // Transformation per record
 records.eachWithIndex { rec, idx ->
     def errs = []
-    // Required fields
-    if (!rec._id)           errs << '_id is required'
-    if (!rec.SIM)           errs << 'SIM is required'
-    if (!rec.customer)      errs << 'customer is required'
-    if (!rec.code_rio)      errs << 'code_rio is required'
+    if (!rec._id)      errs << '_id is required'
+    if (!rec.SIM)      errs << 'SIM is required'
+    if (!rec.customer) errs << 'customer is required'
+    if (!rec.code_rio) errs << 'code_rio is required'
 
-    // Parse creation_date
-    long createdAt = 0L
-    if (rec.creation_date) {
-        try {
-            createdAt = Instant.parse(rec.creation_date).toEpochMilli()
-        } catch(DateTimeParseException dtpe) {
-            errs << "Invalid creation_date format: ${rec.creation_date}"
-        }
-    } else {
-        errs << 'creation_date is required'
+    // createdAt must be a Number (epoch‑ms UTC)
+    Long origEpoch = (rec.createdAt instanceof Number) ? rec.createdAt as Long : null
+    if (origEpoch == null) {
+        errs << 'createdAt must be a millisecond timestamp'
     }
 
     if (errs) {
@@ -71,21 +64,33 @@ records.eachWithIndex { rec, idx ->
         return
     }
 
+    // Convert UTC millis to Tunisian‐local millis
+    ZonedDateTime utcDt    = Instant.ofEpochMilli(origEpoch).atZone(ZoneOffset.UTC)
+    ZoneOffset    offset   = utcDt.getOffset()
+    long          localEpoch = origEpoch + offset.getTotalSeconds() * 1000L
+
+    // derive year/month/day from local‐time instant
+    ZonedDateTime localDt = Instant.ofEpochMilli(localEpoch).atZone(tunisZone)
+    int createdYear  = localDt.getYear()
+    int createdMonth = localDt.getMonthValue()
+    int createdDay   = localDt.getDayOfMonth()
+
     // Build transformed record
     def outRec = [
         id                  : rec._id.toString(),
         sim_id              : rec.SIM.toString(),
-        created_at          : createdAt,
+        created_at          : localEpoch,
         agent_id            : rec.agent ?: '',
         old_number          : rec.old_number ?: '',
         code_rio            : rec.code_rio,
         current_operator    : rec.current_operator ?: '',
         customer_id         : rec.customer.toString(),
-        mvno_id             : rec.mvno_id != null ? rec.mvno_id.toString() : '',
+        mvno_id             : rec.mvno_id ? rec.mvno_id.toString() : '',
         first_seen_date     : rec.first_seen_date,
         ingestion_date      : rec.ingestion_date,
         transformation_date : nowMillis,
-        source_system       : rec.source_system
+        source_system       : rec.source_system,
+        partition           : [ createdYear, createdMonth, createdDay ]
     ]
     valid << outRec
 }
@@ -102,8 +107,8 @@ def branch = { List list, Relationship rel, String tableName ->
         def v = inFF.getAttribute(k)
         if (v) attrs[k] = v
     }
-    attrs['file.size'] = String.valueOf(JsonOutput.toJson(list).bytes.length)
-    attrs['records.count'] = String.valueOf(list.size())
+    attrs['file.size']             = String.valueOf(JsonOutput.toJson(list).bytes.length)
+    attrs['records.count']         = String.valueOf(list.size())
     attrs['target_iceberg_table_name'] = tableName
     attrs.each { k,v -> ff = session.putAttribute(ff, k, v) }
     session.transfer(ff, rel)

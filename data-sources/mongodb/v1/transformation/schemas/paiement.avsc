@@ -1,7 +1,7 @@
 {
   "type": "record",
   "name": "Paiement",
-  "namespace": "com.example",
+  "namespace": "processed",
   "fields": [
     { "name": "id", "type": "string" },
     { "name": "commercial_id", "type": "string" },

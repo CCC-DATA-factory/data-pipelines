@@ -1,7 +1,7 @@
 {
   "type": "record",
   "name": "Transactions",
-  "namespace": "com.example",
+  "namespace": "processed",
   "fields": [
     { "name": "id", "type": "string" },
     { "name": "sender_id", "type": "string" },

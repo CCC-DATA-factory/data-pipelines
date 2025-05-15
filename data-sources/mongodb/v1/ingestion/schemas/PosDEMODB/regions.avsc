@@ -1,0 +1,10 @@
+{
+  "type": "record",
+  "name": "RegionRecord",
+  "namespace": "pos",
+  "fields": [
+    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "city", "type": ["null", "string"], "default": null },
+    { "name": "region", "type": ["null", "string"], "default": null }
+  ]
+}

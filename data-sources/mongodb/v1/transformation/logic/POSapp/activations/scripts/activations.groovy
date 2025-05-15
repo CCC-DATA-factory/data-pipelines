@@ -62,6 +62,15 @@ records.each { record ->
         return
     }
 
+    // derive year, month, day from createdAt
+    def createdYear = null, createdMonth = null, createdDay = null
+    if (createdAtMillis != null) {
+        def createdDt = Instant.ofEpochMilli(createdAtMillis).atZone(tunisZone)
+        createdYear  = createdDt.getYear()
+        createdMonth = createdDt.getMonthValue()
+        createdDay   = createdDt.getDayOfMonth()
+    }
+    def shop = (record.shopName ?: "Unknown").toString()
     def transformed = [
         id                  : record._id,
         sim_id              : record.SIM,
@@ -69,11 +78,15 @@ records.each { record ->
         customer_id         : record.customer,
         mvno_id             : record.mvno_id?.toString(),
         createdAt           : createdAtMillis,
-        shopName            : record.shopName ?: "",
+        shopName            : shop,
         first_seen_date     : record.first_seen_date ?: null,
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowMillis,
-        source_system       : record.source_system ?: null
+        source_system       : record.source_system ?: null,
+        created_year        : createdYear,
+        created_month       : createdMonth,
+        created_day         : createdDay,
+        partition           : [ createdYear, createdMonth, createdDay, shop ]
     ]
     transformedRecords << transformed
 }
@@ -82,7 +95,7 @@ if (!transformedRecords.isEmpty()) {
     def successFlowFile = session.create(inputFlowFile)
     successFlowFile = session.write(successFlowFile, { out ->
         out.write(JsonOutput.toJson(transformedRecords).getBytes(StandardCharsets.UTF_8))
-    } as OutputStreamCallback)
+    } as StreamCallback)
 
     successFlowFile = session.putAttribute(successFlowFile, "target_iceberg_table_name", "activation")
     successFlowFile = session.putAttribute(successFlowFile, "schema.name", "activation")
@@ -95,7 +108,7 @@ if (!rejectedRecords.isEmpty()) {
     def failureFlowFile = session.create(inputFlowFile)
     failureFlowFile = session.write(failureFlowFile, { out ->
         out.write(JsonOutput.toJson(rejectedRecords).getBytes(StandardCharsets.UTF_8))
-    } as OutputStreamCallback)
+    } as StreamCallback)
     failureFlowFile = session.putAttribute(failureFlowFile, "error", "Rejected ${rejectedRecords.size()} activation records")
     session.transfer(failureFlowFile, REL_FAILURE)
     log.warn("Rejected ${rejectedRecords.size()} activation records")

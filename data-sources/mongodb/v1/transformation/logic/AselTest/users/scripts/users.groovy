@@ -68,6 +68,7 @@ records.eachWithIndex { record, idx ->
         def transformed = [
             id                  : record._id,
             name                : "${record.firstName} ${record.lastName}",
+            shop_name           : record.shopName ?: null,
             joined_at           : joinedMillis,
             first_seen_date     : record.first_seen_date ?: null,
             ingestion_date      : record.ingestion_date ?: null,

@@ -1,7 +1,7 @@
 {
   "type": "record",
   "name": "Sim",
-  "namespace": "com.example",
+  "namespace": "processed",
   "fields": [
     { "name": "id", "type": "string" },
     { "name": "ICCID", "type": "string" },
@@ -16,6 +16,7 @@
         "logicalType": "timestamp-millis"
       }
     },
-    { "name": "customer_id", "type": "string" }
+    { "name": "customer_id", "type": "string" },
+    { "name": "partition", "type": "string" }
   ]
 }

@@ -5,6 +5,7 @@ import groovy.json.JsonOutput
 import java.time.*
 import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.flowfile.FlowFile
+import org.apache.commons.codec.digest.MurmurHash3
 
 def session = session
 def log = log
@@ -74,6 +75,17 @@ records.eachWithIndex { record, idx ->
         if (!activationMillis && record.first_seen_date instanceof Number) {
             activationMillis = record.first_seen_date
         }
+        byte[] idBytes = (record._id as String).getBytes(StandardCharsets.UTF_8)
+        int rawHash     = MurmurHash3.hash32(idBytes, 0, idBytes.length, 0)
+        int bucket      = Math.abs(rawHash) % 12
+
+        // derive year and month from activation_date
+        def year = null, month = null
+        if (activationMillis) {
+            def activationDate = Instant.ofEpochMilli(activationMillis).atZone(ZoneId.of("Africa/Tunis"))
+            year = activationDate.getYear()
+            month = activationDate.getMonthValue()
+        }
 
         def transformed = [
             id                  : record._id,
@@ -82,12 +94,13 @@ records.eachWithIndex { record, idx ->
             MSISDN              : record.MSISDN,
             IMSI                : record.IMSI,
             mvno_id             : record.mvno,
-            activation_date     : activationMillis ?: nowMillis,
-            customer_id         : "unknown", // placeholder if customer_id not present in original schema
+            activation_date     : activationMillis,
+            customer_id         : "unknown", 
             first_seen_date     : record.first_seen_date ?: null,
             ingestion_date      : record.ingestion_date ?: null,
             transformation_date : nowMillis,
-            source_system       : record.source_system ?: null
+            source_system       : record.source_system ?: null,
+            partition           : [ bucket, year, month ]
         ]
         validRecords << transformed
     }
@@ -99,8 +112,8 @@ if (!validRecords.isEmpty()) {
         out.write(JsonOutput.toJson(validRecords).getBytes(StandardCharsets.UTF_8))
     } as OutputStreamCallback)
 
-    successFlowFile = session.putAttribute(successFlowFile, "target_iceberg_table_name", "sim")
-    successFlowFile = session.putAttribute(successFlowFile, "schema.name", "sim")
+    successFlowFile = session.putAttribute(successFlowFile, "target_iceberg_table_name", "sims")
+    successFlowFile = session.putAttribute(successFlowFile, "schema.name", "sims")
     successFlowFile = session.putAttribute(successFlowFile, "record.count", validRecords.size().toString())
     session.transfer(successFlowFile, REL_SUCCESS)
     log.info("Transferred ${validRecords.size()} sim records to success")
@@ -110,7 +123,7 @@ if (!invalidRecords.isEmpty()) {
     def failureFlowFile = session.create(inputFlowFile)
     failureFlowFile = session.write(failureFlowFile, { out ->
         out.write(JsonOutput.toJson(invalidRecords).getBytes(StandardCharsets.UTF_8))
-    } as OutputStreamCallback)
+    } as StreamCallback)
     failureFlowFile = session.putAttribute(failureFlowFile, "error", "Found ${invalidRecords.size()} invalid sim records")
     session.transfer(failureFlowFile, REL_FAILURE)
     log.warn("Transferred ${invalidRecords.size()} invalid sim records to failure")

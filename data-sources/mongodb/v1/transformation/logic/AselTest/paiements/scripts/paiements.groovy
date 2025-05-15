@@ -48,7 +48,7 @@ records.each { record ->
                             .withZoneSameInstant(tunisZone)
                             .toInstant().toEpochMilli()
     } else if (record.first_seen_date != null) {
-        createdMillis = record.first_seen_date as Long // Already in Tunisian time
+        createdMillis = record.first_seen_date as Long 
     }
 
     def requiredFieldsPresent = record._id && record.commercial && record.franchise &&
@@ -58,6 +58,15 @@ records.each { record ->
         record['_error'] = "Missing required fields or created_at is null"
         rejectedRecords << record
         return
+    }
+
+    // derive year, month, day from createdAt
+    def createdYear = null, createdMonth = null, createdDay = null
+    if (createdMillis != null) {
+        def dt = Instant.ofEpochMilli(createdMillis).atZone(tunisZone)
+        createdYear  = dt.getYear()
+        createdMonth = dt.getMonthValue()
+        createdDay   = dt.getDayOfMonth()
     }
 
     def transformed = [
@@ -70,7 +79,8 @@ records.each { record ->
         first_seen_date     : record.first_seen_date ?: null,
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowMillis,
-        source_system       : record.source_system ?: null
+        source_system       : record.source_system ?: null,
+        partition           : [ createdYear, createdMonth, createdDay ]
     ]
     transformedRecords << transformed
 }
@@ -79,7 +89,7 @@ if (!transformedRecords.isEmpty()) {
     def successFlowFile = session.create(inputFlowFile)
     successFlowFile = session.write(successFlowFile, { out ->
         out.write(JsonOutput.toJson(transformedRecords).getBytes(StandardCharsets.UTF_8))
-    } as OutputStreamCallback)
+    } as StreamCallback)
 
     successFlowFile = session.putAttribute(successFlowFile, "target_iceberg_table_name", "paiement")
     successFlowFile = session.putAttribute(successFlowFile, "schema.name", "paiement")
@@ -92,7 +102,7 @@ if (!rejectedRecords.isEmpty()) {
     def failureFlowFile = session.create(inputFlowFile)
     failureFlowFile = session.write(failureFlowFile, { out ->
         out.write(JsonOutput.toJson(rejectedRecords).getBytes(StandardCharsets.UTF_8))
-    } as OutputStreamCallback)
+    } as StreamCallback)
     failureFlowFile = session.putAttribute(failureFlowFile, "error", "Rejected ${rejectedRecords.size()} paiement records")
     session.transfer(failureFlowFile, REL_FAILURE)
     log.warn("Rejected ${rejectedRecords.size()} paiement records")

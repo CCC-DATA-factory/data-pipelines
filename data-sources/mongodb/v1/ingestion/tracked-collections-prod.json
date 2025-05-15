@@ -1,0 +1,155 @@
+{ 
+    "collections":[
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "sub-wholesalers",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "transactions",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "portabilities",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "sub-distributors",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "admins",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "bundles",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "paiements",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "superadmins",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "wholesalers",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "topuplights",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "users",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "sims",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "retailers",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "topupbundles",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "AselPayAppDB",
+        "collection_name": "mvnos",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "users",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "contracts_updated",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "customers",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "packages",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "mvno_packages",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "customerverifications",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "AgentWithUsers",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "shops",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "mvnos",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "agents",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "contracts",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "resellers",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "activations",
+        "Analysis_related": "True"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "portabilities",
+        "Analysis_related": "False"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "regions",
+        "Analysis_related": "False"
+      }
+    ],
+"last_update" : "2022-02-28T14:45:12.385+00:00"
+}

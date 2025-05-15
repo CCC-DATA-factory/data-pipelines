@@ -69,21 +69,27 @@ records.eachWithIndex { record, idx ->
         invalidRecords << record
         log.warn("Invalid record at index ${idx}: ${error}")
     } else {
-        def createdAtMillis = parseDateMillis(record.createdAt)
+        def createdAtMillis = (record.createdAt instanceof Number) ? record.createdAt : parseDateMillis(record.createdAt)
         if (createdAtMillis == null && record.first_seen_date instanceof Number) {
             createdAtMillis = record.first_seen_date
         }
+
+        def dt = Instant.ofEpochMilli(createdAtMillis).atZone(ZoneId.of("Africa/Tunis"))
+        int createdYear = dt.getYear()
+        int createdMonth = dt.getMonthValue()
+        int createdDay = dt.getDayOfMonth()
 
         def transformed = [
             id                  : record._id,
             sender_id           : record.sender,
             recipient_id        : record.recipient,
             transactionAmount   : (record.transactionAmount.amount as Number).toDouble(),
-            createdAt           : createdAtMillis ?: nowTunisMillis,
+            createdAt           : createdAtMillis,
             first_seen_date     : record.first_seen_date ?: null,
             ingestion_date      : record.ingestion_date ?: null,
             transformation_date : nowTunisMillis,
             source_system       : record.source_system ?: null
+            partition           : [createdYear, createdMonth, createdDay]
         ]
         validRecords << transformed
     }
