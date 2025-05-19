@@ -10,121 +10,123 @@ def log = log
 def session = session
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
 
+// 1) Fetch incoming FlowFile
 FlowFile inputFlowFile = session.get()
 if (!inputFlowFile) return
 
+// 2) Read full JSON payload
 String inputJson = ''
 inputFlowFile = session.write(inputFlowFile, { inputStream, outputStream ->
     inputJson = IOUtils.toString(inputStream, StandardCharsets.UTF_8)
     outputStream.write(inputJson.getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
+// 3) Parse JSON array
 def parser = new JsonSlurper()
 def records
 try {
     records = parser.parseText(inputJson)
     if (!(records instanceof List)) {
-        log.error("Expected a list of JSON objects")
-        inputFlowFile = session.putAttribute(inputFlowFile, "error", "Input is not a list")
+        log.error("Input is not a JSON array")
+        inputFlowFile = session.putAttribute(inputFlowFile, "error", "Expected JSON array")
         session.transfer(inputFlowFile, REL_FAILURE)
         return
     }
 } catch (Exception e) {
-    log.error("Failed to parse input JSON", e)
+    log.error("Failed to parse JSON", e)
     inputFlowFile = session.putAttribute(inputFlowFile, "error", "Invalid JSON: ${e.message}")
     session.transfer(inputFlowFile, REL_FAILURE)
     return
 }
 
-long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
-List validRecords = []
-List invalidRecords = []
+// 4) Compute “now” in Tunis
+ZoneId tunis = ZoneId.of("Africa/Tunis")
+long nowMillis = ZonedDateTime.now(tunis).toInstant().toEpochMilli()
 
-def parseDateMillis = { str ->
-    try {
-        return Instant.parse(str).toEpochMilli()
-    } catch (Exception e) {
-        return null
-    }
-}
-
-records.eachWithIndex { record, idx ->
+// 5) Transform each record
+List transformed = []
+records.eachWithIndex { rec, idx ->
     def error = null
 
-    if (!(record._id instanceof String)) {
+    // a) Validate
+    if (!(rec._id instanceof String)) {
         error = "_id must be a string"
-    } else if (record.rejected_At != null) {
-        error = "rejected_At is not null → rejected record"
-    } else if (!(record.sender instanceof String)) {
+    } else if (rec.rejected_At != null) {
+        error = "rejected_At is not null (rejected record)"
+    } else if (!(rec.sender instanceof String)) {
         error = "sender must be a string"
-    } else if (!(record.recipient instanceof String)) {
+    } else if (!(rec.recipient instanceof String)) {
         error = "recipient must be a string"
-    } else if (!(record.transactionAmount?.amount instanceof Number)) {
+    } else if (!(rec.transactionAmount?.amount instanceof Number)) {
         error = "transactionAmount.amount must be a number"
     }
 
-    if (error) {
-        record['_error'] = error
-        record['_index'] = idx
-        invalidRecords << record
-        log.warn("Invalid record at index ${idx}: ${error}")
-    } else {
-        def createdAtMillis = (record.createdAt instanceof Number) ? record.createdAt : parseDateMillis(record.createdAt)
-        if (createdAtMillis == null && record.first_seen_date instanceof Number) {
-            createdAtMillis = record.first_seen_date
+    // b) Parse createdAt (number or ISO string) or fallback
+    Long createdAt = null
+    if (!error) {
+        if (rec.createdAt instanceof Number) {
+            createdAt = (rec.createdAt as Number).longValue()
+        } else if (rec.createdAt instanceof String) {
+            try { createdAt = Instant.parse(rec.createdAt).toEpochMilli() }
+            catch(_) { createdAt = null }
         }
+        if (createdAt == null && rec.first_seen_date instanceof Number) {
+            createdAt = (rec.first_seen_date as Number).longValue()
+        }
+        if (createdAt == null) {
+            error = "createdAt is invalid or missing"
+        }
+    }
 
-        def dt = Instant.ofEpochMilli(createdAtMillis).atZone(ZoneId.of("Africa/Tunis"))
-        int createdYear = dt.getYear()
-        int createdMonth = dt.getMonthValue()
-        int createdDay = dt.getDayOfMonth()
+    // c) Build base output
+    def out = [
+        id                : rec._id ?: null,
+        sender_id         : rec.sender ?: null,
+        recipient_id      : rec.recipient ?: null,
+        transactionAmount : (rec.transactionAmount?.amount as Number)?.toDouble(),
+        createdAt         : createdAt ?: nowMillis,
+        first_seen_date   : rec.first_seen_date ?: null,
+        ingestion_date    : rec.ingestion_date ?: null,
+        transformation_date: nowMillis,
+        source_system     : rec.source_system ?: null,
+        is_valid          : (error == null),
+        comment           : error
+    ]
 
-        def transformed = [
-            id                  : record._id,
-            sender_id           : record.sender,
-            recipient_id        : record.recipient,
-            transactionAmount   : (record.transactionAmount.amount as Number).toDouble(),
-            createdAt           : createdAtMillis,
-            first_seen_date     : record.first_seen_date ?: null,
-            ingestion_date      : record.ingestion_date ?: null,
-            transformation_date : nowTunisMillis,
-            source_system       : record.source_system ?: null
-            partition           : [createdYear, createdMonth, createdDay]
-        ]
-        validRecords << transformed
+    // d) Add partition (always include; null if no createdAt)
+    if (createdAt != null) {
+        def dt = Instant.ofEpochMilli(createdAt).atZone(tunis)
+        out.partition = [dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth()]
+    } else {
+        out.partition = null
+    }
+
+    transformed << out
+
+    if (error) {
+        log.warn("Record ${idx} invalid: ${error}")
     }
 }
 
-if (!validRecords.isEmpty()) {
-    FlowFile successFlowFile = session.create(inputFlowFile)
-    successFlowFile = session.write(successFlowFile, { outputStream ->
-        outputStream.write(JsonOutput.toJson(validRecords).getBytes(StandardCharsets.UTF_8))
-    } as OutputStreamCallback)
+// 6) Always write out _all_ records
+FlowFile outFF = session.create(inputFlowFile)
+outFF = session.write(outFF, { _, os ->
+    os.write(JsonOutput.toJson(transformed).getBytes(StandardCharsets.UTF_8))
+} as StreamCallback)
 
-    def newAttributes = [:]
-    inheritedAttributes.each { attr ->
-        def val = inputFlowFile.getAttribute(attr)
-        if (val != null) newAttributes[attr] = val
-    }
-
-    newAttributes['file.size'] = validRecords.size().toString()
-    newAttributes['records.count'] = validRecords.size().toString()
-    newAttributes['target_iceberg_table_name'] = "transactions"
-    newAttributes['schema.name'] = "transactions"
-
-    newAttributes.each { k, v -> successFlowFile = session.putAttribute(successFlowFile, k, v) }
-    session.transfer(successFlowFile, REL_SUCCESS)
-    log.info("Transferred ${validRecords.size()} transaction records to success")
+// 7) Copy inherited attrs + metadata
+def attrs = [:]
+inheritedAttributes.each { k ->
+    inputFlowFile.getAttribute(k)?.with { attrs[k] = it }
 }
+def bytes = JsonOutput.toJson(transformed).getBytes(StandardCharsets.UTF_8)
+attrs['file.size'] = bytes.length.toString()
+attrs['records.count'] = transformed.size().toString()
+attrs['target_iceberg_table_name'] = 'transactions'
+attrs['schema.name'] = 'transactions'
+attrs.each { k, v -> outFF = session.putAttribute(outFF, k, v) }
 
-if (!invalidRecords.isEmpty()) {
-    FlowFile failureFlowFile = session.create(inputFlowFile)
-    failureFlowFile = session.write(failureFlowFile, { outputStream ->
-        outputStream.write(JsonOutput.toJson(invalidRecords).getBytes(StandardCharsets.UTF_8))
-    } as OutputStreamCallback)
-    failureFlowFile = session.putAttribute(failureFlowFile, "error", "Found ${invalidRecords.size()} invalid records")
-    session.transfer(failureFlowFile, REL_FAILURE)
-    log.warn("Transferred ${invalidRecords.size()} invalid transaction records to failure")
-}
-
+// 8) Transfer and cleanup
+session.transfer(outFF, REL_SUCCESS)
 session.remove(inputFlowFile)
+log.info("Transferred ${transformed.size()} records (valid + invalid)")  

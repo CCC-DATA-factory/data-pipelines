@@ -3,6 +3,7 @@ import java.nio.charset.StandardCharsets
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 import org.apache.nifi.processor.io.StreamCallback
+import org.apache.nifi.processor.io.OutputStreamCallback
 import java.time.*
 
 def session = session
@@ -11,6 +12,7 @@ def log = log
 FlowFile inputFlowFile = session.get()
 if (!inputFlowFile) return
 
+// Safely read input using 2-arg StreamCallback
 def inputJson = ''
 inputFlowFile = session.write(inputFlowFile, { inputStream, outputStream ->
     inputJson = IOUtils.toString(inputStream, StandardCharsets.UTF_8)
@@ -22,12 +24,14 @@ def records
 try {
     records = jsonSlurper.parseText(inputJson)
     if (!(records instanceof List)) {
-        log.error("Expected a list of objects but got: " + records.getClass().getName())
+        log.error("Expected a list of objects but got: ${records.getClass().getName()}")
+        inputFlowFile = session.putAttribute(inputFlowFile, "error", "Input is not a list")
         session.transfer(inputFlowFile, REL_FAILURE)
         return
     }
 } catch (Exception e) {
     log.error("Failed to parse input JSON", e)
+    inputFlowFile = session.putAttribute(inputFlowFile, "error", "Invalid JSON: ${e.message}")
     session.transfer(inputFlowFile, REL_FAILURE)
     return
 }
@@ -35,47 +39,51 @@ try {
 ZoneId tunisZone = ZoneId.of("Africa/Tunis")
 long nowMillis = ZonedDateTime.now(tunisZone).toInstant().toEpochMilli()
 
-List transformedRecords = []
-List rejectedRecords = []
+List outputRecords = []
 
-records.each { record ->
+records.eachWithIndex { record, idx ->
+    def createdAtMillis = null
+    def errorMessages = []
+
+    // Rule 1: Must be completed
     if (!record.completed) {
-        record['_error'] = "Not completed"
-        rejectedRecords << record
-        return
+        errorMessages << "Not completed"
     }
 
-    Long createdAtMillis = null
-    if (record.creation_date != null && record.creation_date.isLong()) {
-        // Convert UTC millis to Tunisian millis
+    // Rule 2: Validate creation_date
+    if (record.creation_date != null && record.creation_date.toString().isLong()) {
         def utcMillis = record.creation_date as Long
         createdAtMillis = ZonedDateTime.ofInstant(Instant.ofEpochMilli(utcMillis), ZoneOffset.UTC)
-                            .withZoneSameInstant(tunisZone)
-                            .toInstant().toEpochMilli()
+            .withZoneSameInstant(tunisZone)
+            .toInstant().toEpochMilli()
     } else if (record.first_seen_date != null) {
-        createdAtMillis = record.first_seen_date as Long // Already in Tunisian time
+        createdAtMillis = record.first_seen_date as Long
+    } else {
+        errorMessages << "Missing creation_date or first_seen_date"
     }
 
-    if (!record._id || !record.SIM || !record.agent || !record.customer || createdAtMillis == null) {
-        record['_error'] = "Missing required fields or createdAt is null"
-        rejectedRecords << record
-        return
-    }
+    // Rule 3: Required fields
+    if (!record._id) errorMessages << "_id is required"
+    if (!record.SIM) errorMessages << "SIM is required"
+    if (!record.agent) errorMessages << "agent is required"
+    if (!record.customer) errorMessages << "customer is required"
+    if (createdAtMillis == null) errorMessages << "Invalid createdAtMillis"
 
-    // derive year, month, day from createdAt
     def createdYear = null, createdMonth = null, createdDay = null
     if (createdAtMillis != null) {
-        def createdDt = Instant.ofEpochMilli(createdAtMillis).atZone(tunisZone)
-        createdYear  = createdDt.getYear()
-        createdMonth = createdDt.getMonthValue()
-        createdDay   = createdDt.getDayOfMonth()
+        def dt = Instant.ofEpochMilli(createdAtMillis).atZone(tunisZone)
+        createdYear = dt.getYear()
+        createdMonth = dt.getMonthValue()
+        createdDay = dt.getDayOfMonth()
     }
+
     def shop = (record.shopName ?: "Unknown").toString()
+
     def transformed = [
-        id                  : record._id,
-        sim_id              : record.SIM,
-        agent_id            : record.agent,
-        customer_id         : record.customer,
+        id                  : record._id ?: null,
+        sim_id              : record.SIM ?: null,
+        agent_id            : record.agent ?: null,
+        customer_id         : record.customer ?: null,
         mvno_id             : record.mvno_id?.toString(),
         createdAt           : createdAtMillis,
         shopName            : shop,
@@ -83,35 +91,27 @@ records.each { record ->
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowMillis,
         source_system       : record.source_system ?: null,
-        created_year        : createdYear,
-        created_month       : createdMonth,
-        created_day         : createdDay,
-        partition           : [ createdYear, createdMonth, createdDay, shop ]
+        partition           : [createdYear, createdMonth, createdDay, shop],
+        is_valid            : errorMessages.isEmpty(),
+        comment             : errorMessages ? errorMessages.join("; ") : null
     ]
-    transformedRecords << transformed
+
+    outputRecords << transformed
 }
 
-if (!transformedRecords.isEmpty()) {
+// Write output safely using OutputStreamCallback (1-arg)
+if (!outputRecords.isEmpty()) {
     def successFlowFile = session.create(inputFlowFile)
     successFlowFile = session.write(successFlowFile, { out ->
-        out.write(JsonOutput.toJson(transformedRecords).getBytes(StandardCharsets.UTF_8))
-    } as StreamCallback)
+        out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
+    } as OutputStreamCallback)
 
     successFlowFile = session.putAttribute(successFlowFile, "target_iceberg_table_name", "activation")
     successFlowFile = session.putAttribute(successFlowFile, "schema.name", "activation")
-    successFlowFile = session.putAttribute(successFlowFile, "record.count", transformedRecords.size().toString())
-    session.transfer(successFlowFile, REL_SUCCESS)
-    log.info("Transferred ${transformedRecords.size()} valid activation records")
-}
+    successFlowFile = session.putAttribute(successFlowFile, "record.count", outputRecords.size().toString())
 
-if (!rejectedRecords.isEmpty()) {
-    def failureFlowFile = session.create(inputFlowFile)
-    failureFlowFile = session.write(failureFlowFile, { out ->
-        out.write(JsonOutput.toJson(rejectedRecords).getBytes(StandardCharsets.UTF_8))
-    } as StreamCallback)
-    failureFlowFile = session.putAttribute(failureFlowFile, "error", "Rejected ${rejectedRecords.size()} activation records")
-    session.transfer(failureFlowFile, REL_FAILURE)
-    log.warn("Rejected ${rejectedRecords.size()} activation records")
+    session.transfer(successFlowFile, REL_SUCCESS)
+    log.info("Transferred ${outputRecords.size()} activation records with validation metadata")
 }
 
 session.remove(inputFlowFile)

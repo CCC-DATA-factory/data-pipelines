@@ -22,7 +22,6 @@ if (!inFF) return
 String rawJson = ''
 inFF = session.write(inFF, { InputStream inStream, OutputStream outStream ->
     rawJson = IOUtils.toString(inStream, StandardCharsets.UTF_8)
-    // write back the same content so inFF remains unchanged
     outStream.write(rawJson.getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
@@ -42,13 +41,13 @@ try {
 }
 
 // prepare accumulators
-def allBundles = []
-def allPriceHistories = []
-def failed      = []
+List allBundles = []
+List allPriceHistories = []
 long nowMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
 
 // helper to process a single record
-def processBundle = { Map data ->
+inputRecords.eachWithIndex { data, idx ->
+    def errors = []
     // override first price_history date
     try {
         def sdf = new SimpleDateFormat('yyyy-MM-dd')
@@ -60,102 +59,77 @@ def processBundle = { Map data ->
     } catch(Exception e) {
         log.warn("Could not override price_history date: ${e.message}")
     }
-
     // validations
-    def errors = []
-    if (!data.name?.trim())                                errors << 'name is required'
-    if (!data.bundleId)                                    errors << 'bundleId is required'
-    if (!(data.price?.amount instanceof Number))           errors << 'price.amount missing or invalid'
-    if (!(data.validity?.number instanceof Number))        errors << 'validity.number missing or invalid'
-    if (!data.createdAt && !data.first_seen_date)          errors << 'createdAt/first_seen_date missing'
-    
-    // require at least one content field
+    if (!data.name?.trim())                        errors << 'name is required'
+    if (!data.bundleId)                            errors << 'bundleId is required'
+    if (!(data.price?.amount instanceof Number))   errors << 'price.amount missing or invalid'
+    if (!(data.validity?.number instanceof Number))errors << 'validity.number missing or invalid'
+    if (!data.createdAt && !data.first_seen_date)  errors << 'createdAt/first_seen_date missing'
     if (!( (data.content?.data?.amount instanceof Number) 
         || (data.content?.voice?.amount instanceof Number) 
         || (data.content?.sms instanceof Number) )) {
         errors << 'At least one of content.data.amount, content.voice.amount, content.sms is required'
     }
-
-    if (errors) throw new Exception("Validation errors: ${errors.join('; ')}")
-
-    // compute units
-    def dataAmt   = data.content?.data?.amount ?: 0
-    def dataUnit  = data.content?.data?.unit ?: 'Megabytes'
-    def dataGB    = (dataUnit == 'Megabytes') ? dataAmt/1000.0 : dataAmt
-    def voiceAmt  = data.content?.voice?.amount ?: 0
-    def voiceUnit = data.content?.voice?.unit ?: 'Minutes'
-    def voiceMin  = (voiceUnit == 'Hours') ? voiceAmt*60 : voiceAmt
-
-    def createdRaw    = data.createdAt ?: data.first_seen_date
-    long createdMillis = createdRaw.toString().toLong()
-
-    // build bundle object
+    // base transform
     def bundleObj = [
         id                  : data._id,
         name                : data.name,
-        bundleid            : data.bundleId.toString(),
-        data_amount_gb      : dataGB,
-        voice_amount_minutes: voiceMin,
+        bundleid            : data.bundleId?.toString(),
+        data_amount_gb      : null,
+        voice_amount_minutes: null,
         sms_amount          : data.content?.sms ?: 0,
-        validity_days       : data.validity.number,
-        createdat           : createdMillis,
+        validity_days       : data.validity?.number,
+        createdat           : null,
         first_seen_date     : data.first_seen_date,
         ingestion_date      : data.ingestion_date,
         transformation_date : nowMillis,
-        source_system       : data.source_system
+        source_system       : data.source_system,
+        partition           : null
     ]
-
-    // build and sort price history list
-    def hist = []
-    (data.price_history ?: []).each { rec ->
+    // compute units and created at only if valid so far
+    if (!errors) {
         try {
-            long dt = rec.date.toString().toLong()
-            hist << [ bundleid: bundleObj.bundleid, price: rec.price, date: dt ]
-        } catch(_) { /* skip invalid entries */ }
+            def dataAmt   = data.content?.data?.amount ?: 0
+            def dataUnit  = data.content?.data?.unit ?: 'Megabytes'
+            bundleObj.data_amount_gb = (dataUnit == 'Megabytes') ? dataAmt/1000.0 : dataAmt
+            def voiceAmt  = data.content?.voice?.amount ?: 0
+            def voiceUnit = data.content?.voice?.unit ?: 'Minutes'
+            bundleObj.voice_amount_minutes = (voiceUnit == 'Hours') ? voiceAmt*60 : voiceAmt
+            def createdRaw = data.createdAt ?: data.first_seen_date
+            long createdMillis = createdRaw.toString().toLong()
+            bundleObj.createdat = createdMillis
+        } catch(Exception e) {
+            errors << "Transformation error: ${e.message}"
+        }
     }
-    hist.sort { it.date }
-
-    // build price intervals
-    def priceArray = []
-    hist.eachWithIndex { e, i ->
-        long start = (i==0 ? createdMillis : hist[i-1].date)
-        long end   = e.date
-        if (start > end) start = end
-        priceArray << [
+    // add validation fields
+    bundleObj.is_valid = errors.isEmpty()
+    bundleObj.comment = errors.isEmpty() ? null : errors.join('; ')
+    // add to bundles
+    allBundles << bundleObj
+    // build price history entries even if invalid bundle
+    (data.price_history ?: []).each { rec ->
+        def ph = [
             bundleid           : bundleObj.bundleid,
-            price              : e.price,
-            start_date         : start,
-            end_date           : end,
+            price              : rec.price,
+            start_date         : null,
+            end_date           : null,
             first_seen_date    : data.first_seen_date,
             ingestion_date     : data.ingestion_date,
             transformation_date: nowMillis,
-            source_system      : data.source_system
+            source_system      : data.source_system,
+            is_valid           : bundleObj.is_valid,
+            comment            : bundleObj.comment,
+            partition          : null
         ]
-    }
-    // add final open-ended interval
-    priceArray << [
-        bundleid           : bundleObj.bundleid,
-        price              : data.price.amount,
-        start_date         : (hist ? hist[-1].date : createdMillis),
-        end_date           : 253402300799000L,
-        first_seen_date    : data.first_seen_date,
-        ingestion_date     : data.ingestion_date,
-        transformation_date: nowMillis,
-        source_system      : data.source_system
-    ]
-
-    return [ bundleObj, priceArray ]
-}
-
-// process each record
-inputRecords.eachWithIndex { rec, idx ->
-    try {
-        def (b, pArr) = processBundle(rec)
-        allBundles << b
-        allPriceHistories.addAll(pArr)
-    } catch(Exception e) {
-        failed << [ index: idx, record: rec, error: e.message ]
-        log.error("Record $idx failed: ${e.message}", e)
+        try {
+            long dt = rec.date.toString().toLong()
+            ph.end_date = dt
+            ph.start_date = dt
+        } catch(_) {
+            // leave dates null
+        }
+        allPriceHistories << ph
     }
 }
 
@@ -167,12 +141,9 @@ def branch = { List data, Relationship rel, String tableName ->
         os.write(JsonOutput.toJson(data).getBytes(StandardCharsets.UTF_8))
     } as StreamCallback)
     def attrs = [:]
-    inheritedAttributes.each { k ->
-        def v = inFF.getAttribute(k)
-        if (v) attrs[k] = v
-    }
-    attrs['file.size']                 = String.valueOf(JsonOutput.toJson(data).bytes.length)
-    attrs['records.count']             = String.valueOf(data.size())
+    inheritedAttributes.each { k -> inFF.getAttribute(k)?.with { attrs[k] = it } }
+    attrs['file.size'] = String.valueOf(JsonOutput.toJson(data).bytes.length)
+    attrs['records.count'] = String.valueOf(data.size())
     attrs['target_iceberg_table_name'] = tableName
     attrs['schema.name'] = tableName
     attrs.each { k,v -> out = session.putAttribute(out, k, v) }
@@ -182,7 +153,6 @@ def branch = { List data, Relationship rel, String tableName ->
 // write branches
 branch(allBundles,        REL_SUCCESS, 'bundles')
 branch(allPriceHistories, REL_SUCCESS, 'bundles_price_history')
-branch(failed,            REL_FAILURE, 'failed_records')
 
 // remove original
 session.remove(inFF)

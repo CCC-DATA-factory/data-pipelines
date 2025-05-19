@@ -6,13 +6,16 @@ import java.time.*
 import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.flowfile.FlowFile
 
-def log = log
+// Initialize session and log
 def session = session
+def log = log
+// Attributes to carry over
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
 
 FlowFile inputFlowFile = session.get()
 if (!inputFlowFile) return
 
+// Read content
 String inputJson = ''
 inputFlowFile = session.write(inputFlowFile, { inputStream, outputStream ->
     inputJson = IOUtils.toString(inputStream, StandardCharsets.UTF_8)
@@ -36,24 +39,28 @@ try {
     return
 }
 
+// Current timestamp
 long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
-List validRecords = []
-List invalidRecords = []
+List combinedRecords = []
 
+// Process each record, annotate errors
 records.eachWithIndex { record, idx ->
     def error = null
+    // Validation logic
     if (!(record._id instanceof String)) {
         error = "_id must be a string"
     } else if (!(record.user instanceof String)) {
         error = "user must be a string"
     }
-
+    
+    // Base output record starts as original
+    def outRec = new LinkedHashMap<>(record)
     if (error) {
-        record['_error'] = error
-        record['_index'] = idx
-        invalidRecords << record
+        outRec['is_valid'] = false
+        outRec['comment'] = error
         log.warn("Invalid record at index ${idx}: ${error}")
     } else {
+        // Transformation logic unchanged for valid
         def transformed = [
             id                  : record._id,
             id_user             : record.user,
@@ -62,42 +69,34 @@ records.eachWithIndex { record, idx ->
             first_seen_date     : record.first_seen_date ?: null,
             ingestion_date      : record.ingestion_date ?: null,
             transformation_date : nowTunisMillis,
-            source_system       : record.source_system ?: null
+            source_system       : record.source_system ?: null,
+            partition           : null
         ]
-        validRecords << transformed
+        // Merge transformed fields
+        transformed.each { k, v -> outRec[k] = v }
+        outRec['is_valid'] = true
+        outRec['comment'] = null
     }
+    combinedRecords << outRec
 }
 
-if (!validRecords.isEmpty()) {
-    FlowFile successFlowFile = session.create(inputFlowFile)
-    successFlowFile = session.write(successFlowFile, { outputStream ->
-        outputStream.write(JsonOutput.toJson(validRecords).getBytes(StandardCharsets.UTF_8))
-    } as OutputStreamCallback)
+// Create output FlowFile
+FlowFile outputFlowFile = session.create(inputFlowFile)
+outputFlowFile = session.write(outputFlowFile, { _ , out ->
+    out.write(JsonOutput.toJson(combinedRecords).getBytes(StandardCharsets.UTF_8))
+} as StreamCallback)
 
-    def newAttributes = [:]
-    inheritedAttributes.each { attr ->
-        def val = inputFlowFile.getAttribute(attr)
-        if (val != null) newAttributes[attr] = val
-    }
-    def validJsonBytes = JsonOutput.toJson(validRecords).getBytes(StandardCharsets.UTF_8)
-    newAttributes['file.size'] = String.valueOf(validJsonBytes.length)
-    newAttributes['records.count'] = String.valueOf(validRecords.size())
-    newAttributes['target_iceberg_table_name'] = "roles"
-    newAttributes['schema.name'] = "roles"
-
-    newAttributes.each { k, v -> successFlowFile = session.putAttribute(successFlowFile, k, v) }
-    session.transfer(successFlowFile, REL_SUCCESS)
-    log.info("Transferred ${validRecords.size()} valid sub-wholesaler records to success")
+// Carry over attributes
+inheritedAttributes.each { attr ->
+    inputFlowFile.getAttribute(attr)?.with { outputFlowFile = session.putAttribute(outputFlowFile, attr, it) }
 }
+// Set metadata attributes
+def jsonBytes = JsonOutput.toJson(combinedRecords).getBytes(StandardCharsets.UTF_8)
+outputFlowFile = session.putAttribute(outputFlowFile, 'file.size', String.valueOf(jsonBytes.length))
+outputFlowFile = session.putAttribute(outputFlowFile, 'records.count', String.valueOf(combinedRecords.size()))
+outputFlowFile = session.putAttribute(outputFlowFile, 'target_iceberg_table_name', 'roles')
+outputFlowFile = session.putAttribute(outputFlowFile, 'schema.name', 'roles')
 
-if (!invalidRecords.isEmpty()) {
-    FlowFile failureFlowFile = session.create(inputFlowFile)
-    failureFlowFile = session.write(failureFlowFile, { outputStream ->
-        outputStream.write(JsonOutput.toJson(invalidRecords).getBytes(StandardCharsets.UTF_8))
-    } as OutputStreamCallback)
-    failureFlowFile = session.putAttribute(failureFlowFile, "error", "Found ${invalidRecords.size()} invalid records")
-    session.transfer(failureFlowFile, REL_FAILURE)
-    log.warn("Transferred ${invalidRecords.size()} invalid sub-wholesaler records to failure")
-}
-
+session.transfer(outputFlowFile, REL_SUCCESS)
 session.remove(inputFlowFile)
+log.info("Transferred ${combinedRecords.size()} records with validation flags")

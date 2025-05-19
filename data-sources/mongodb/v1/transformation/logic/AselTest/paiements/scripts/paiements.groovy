@@ -4,6 +4,7 @@ import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 import org.apache.nifi.processor.io.StreamCallback
 import java.time.*
+import org.apache.nifi.flowfile.FlowFile
 
 def session = session
 def log = log
@@ -35,77 +36,67 @@ try {
 ZoneId tunisZone = ZoneId.of("Africa/Tunis")
 long nowMillis = ZonedDateTime.now(tunisZone).toInstant().toEpochMilli()
 
-List transformedRecords = []
-List rejectedRecords = []
+List outputRecords = []
 
 records.each { record ->
+    def errorMessages = []
     def createdMillis = null
 
-    if (record.createdAt != null && record.createdAt.isLong()) {
-        // Parse UTC millis string and convert to Tunisian time
+    // Parse createdAt or fallback to first_seen_date
+    if (record.createdAt instanceof Number) {
         def utcMillis = record.createdAt as Long
         createdMillis = ZonedDateTime.ofInstant(Instant.ofEpochMilli(utcMillis), ZoneOffset.UTC)
                             .withZoneSameInstant(tunisZone)
                             .toInstant().toEpochMilli()
-    } else if (record.first_seen_date != null) {
-        createdMillis = record.first_seen_date as Long 
+    } else if (record.first_seen_date instanceof Number) {
+        createdMillis = record.first_seen_date as Long
+    } else {
+        errorMessages << "Missing or invalid createdAt/first_seen_date"
     }
 
-    def requiredFieldsPresent = record._id && record.commercial && record.franchise &&
-                                 record.transaction && record.amount != null && createdMillis != null
+    // Required field checks
+    if (!record._id) errorMessages << "_id missing"
+    if (!record.commercial) errorMessages << "commercial missing"
+    if (!record.franchise) errorMessages << "franchise missing"
+    if (!record.transaction) errorMessages << "transaction missing"
+    if (record.amount == null) errorMessages << "amount missing"
 
-    if (!requiredFieldsPresent) {
-        record['_error'] = "Missing required fields or created_at is null"
-        rejectedRecords << record
-        return
-    }
-
-    // derive year, month, day from createdAt
-    def createdYear = null, createdMonth = null, createdDay = null
-    if (createdMillis != null) {
+    // Build transformed output
+    def outputRec = [:]
+    if (errorMessages.isEmpty()) {
         def dt = Instant.ofEpochMilli(createdMillis).atZone(tunisZone)
-        createdYear  = dt.getYear()
-        createdMonth = dt.getMonthValue()
-        createdDay   = dt.getDayOfMonth()
+        outputRec = [
+            id                  : record._id,
+            commercial_id       : record.commercial,
+            franchise_id        : record.franchise,
+            transaction_id      : record.transaction,
+            amount              : (record.amount instanceof Number) ? record.amount.toDouble() : record.amount.toString().toDouble(),
+            created_at          : createdMillis,
+            first_seen_date     : record.first_seen_date ?: null,
+            ingestion_date      : record.ingestion_date ?: null,
+            transformation_date : nowMillis,
+            source_system       : record.source_system ?: null,
+            partition           : [ dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth() ]
+        ]
     }
 
-    def transformed = [
-        id                  : record._id,
-        commercial_id       : record.commercial,
-        franchise_id        : record.franchise,
-        transaction_id      : record.transaction,
-        amount              : (record.amount instanceof Number) ? record.amount.toDouble() : record.amount.toString().toDouble(),
-        created_at          : createdMillis,
-        first_seen_date     : record.first_seen_date ?: null,
-        ingestion_date      : record.ingestion_date ?: null,
-        transformation_date : nowMillis,
-        source_system       : record.source_system ?: null,
-        partition           : [ createdYear, createdMonth, createdDay ]
-    ]
-    transformedRecords << transformed
+    // Add validation flags
+    outputRec['is_valid'] = errorMessages.isEmpty()
+    outputRec['comment'] = errorMessages.isEmpty() ? null : errorMessages.join("; ")
+
+    outputRecords << outputRec
 }
 
-if (!transformedRecords.isEmpty()) {
-    def successFlowFile = session.create(inputFlowFile)
-    successFlowFile = session.write(successFlowFile, { out ->
-        out.write(JsonOutput.toJson(transformedRecords).getBytes(StandardCharsets.UTF_8))
-    } as StreamCallback)
+// Write all records (valid and invalid) to success
+FlowFile successFlowFile = session.create(inputFlowFile)
+successFlowFile = session.write(successFlowFile, { _ , out ->
+    out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
+} as StreamCallback)
 
-    successFlowFile = session.putAttribute(successFlowFile, "target_iceberg_table_name", "paiement")
-    successFlowFile = session.putAttribute(successFlowFile, "schema.name", "paiement")
-    successFlowFile = session.putAttribute(successFlowFile, "record.count", transformedRecords.size().toString())
-    session.transfer(successFlowFile, REL_SUCCESS)
-    log.info("Transferred ${transformedRecords.size()} valid paiement records")
-}
+successFlowFile = session.putAttribute(successFlowFile, "target_iceberg_table_name", "paiement")
+successFlowFile = session.putAttribute(successFlowFile, "schema.name", "paiement")
+successFlowFile = session.putAttribute(successFlowFile, "record.count", outputRecords.size().toString())
 
-if (!rejectedRecords.isEmpty()) {
-    def failureFlowFile = session.create(inputFlowFile)
-    failureFlowFile = session.write(failureFlowFile, { out ->
-        out.write(JsonOutput.toJson(rejectedRecords).getBytes(StandardCharsets.UTF_8))
-    } as StreamCallback)
-    failureFlowFile = session.putAttribute(failureFlowFile, "error", "Rejected ${rejectedRecords.size()} paiement records")
-    session.transfer(failureFlowFile, REL_FAILURE)
-    log.warn("Rejected ${rejectedRecords.size()} paiement records")
-}
-
+session.transfer(successFlowFile, REL_SUCCESS)
 session.remove(inputFlowFile)
+log.info("Transferred ${outputRecords.size()} records with validation flags")

@@ -6,6 +6,7 @@ import java.time.*
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoField
 import org.apache.nifi.processor.io.StreamCallback
+import org.apache.nifi.processor.io.OutputStreamCallback
 import org.apache.nifi.flowfile.FlowFile
 
 def log = log
@@ -15,6 +16,7 @@ def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
 FlowFile inputFlowFile = session.get()
 if (!inputFlowFile) return
 
+// Read input JSON safely
 String inputJson = ''
 inputFlowFile = session.write(inputFlowFile, { inputStream, outputStream ->
     inputJson = IOUtils.toString(inputStream, StandardCharsets.UTF_8)
@@ -39,12 +41,11 @@ try {
 }
 
 long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
-
-List validRecords = []
-List invalidRecords = []
+List outputRecords = []
 
 records.eachWithIndex { record, idx ->
     def error = null
+
     if (!(record._id instanceof String)) {
         error = "_id must be a string"
     } else if (!(record.firstName instanceof String)) {
@@ -58,11 +59,10 @@ records.eachWithIndex { record, idx ->
         error = "Missing createdAt or first_seen_date"
     }
 
-
     if (error) {
-        record['_error'] = error
-        record['_index'] = idx
-        invalidRecords << record
+        record['is_valid'] = false
+        record['comment'] = error
+        outputRecords << record
         log.warn("Invalid record at index ${idx}: ${error}")
     } else {
         def transformed = [
@@ -73,42 +73,37 @@ records.eachWithIndex { record, idx ->
             first_seen_date     : record.first_seen_date ?: null,
             ingestion_date      : record.ingestion_date ?: null,
             transformation_date : nowTunisMillis,
-            source_system       : record.source_system ?: null
+            source_system       : record.source_system ?: null,
+            is_valid            : true,
+            comment             : null,
+            partition           : null
         ]
-        validRecords << transformed
+        outputRecords << transformed
     }
 }
 
-if (!validRecords.isEmpty()) {
-    FlowFile successFlowFile = session.create(inputFlowFile)
-    successFlowFile = session.write(successFlowFile, { outputStream ->
-        outputStream.write(JsonOutput.toJson(validRecords).getBytes(StandardCharsets.UTF_8))
-    } as OutputStreamCallback)
+// Use OutputStreamCallback (1-arg) to avoid MissingMethodException
+FlowFile successFlowFile = session.create(inputFlowFile)
+successFlowFile = session.write(successFlowFile, { outputStream ->
+    outputStream.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
+} as OutputStreamCallback)
 
-    def newAttributes = [:]
-    inheritedAttributes.each { attr ->
-        def val = inputFlowFile.getAttribute(attr)
-        if (val != null) newAttributes[attr] = val
-    }
-    def validJsonBytes = JsonOutput.toJson(validRecords).getBytes(StandardCharsets.UTF_8)
-    newAttributes['file.size'] = String.valueOf(validJsonBytes.length)
-    newAttributes['records.count'] = String.valueOf(validRecords.size())
-    newAttributes['target_iceberg_table_name'] = "users"
-    newAttributes['schema.name'] = "users"
-
-    newAttributes.each { k, v -> successFlowFile = session.putAttribute(successFlowFile, k, v) }
-    session.transfer(successFlowFile, REL_SUCCESS)
-    log.info("Transferred ${validRecords.size()} valid user records to success")
+// Copy attributes and add metadata
+def newAttributes = [:]
+inheritedAttributes.each { attr ->
+    def val = inputFlowFile.getAttribute(attr)
+    if (val != null) newAttributes[attr] = val
 }
 
-if (!invalidRecords.isEmpty()) {
-    FlowFile failureFlowFile = session.create(inputFlowFile)
-    failureFlowFile = session.write(failureFlowFile, { outputStream ->
-        outputStream.write(JsonOutput.toJson(invalidRecords).getBytes(StandardCharsets.UTF_8))
-    } as OutputStreamCallback)
-    failureFlowFile = session.putAttribute(failureFlowFile, "error", "Found ${invalidRecords.size()} invalid records")
-    session.transfer(failureFlowFile, REL_FAILURE)
-    log.warn("Transferred ${invalidRecords.size()} invalid user records to failure")
-}
+def jsonBytes = JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8)
+newAttributes['file.size'] = String.valueOf(jsonBytes.length)
+newAttributes['records.count'] = String.valueOf(outputRecords.size())
+newAttributes['target_iceberg_table_name'] = "users"
+newAttributes['schema.name'] = "users"
+
+newAttributes.each { k, v -> successFlowFile = session.putAttribute(successFlowFile, k, v) }
+
+session.transfer(successFlowFile, REL_SUCCESS)
+log.info("Transferred ${outputRecords.size()} total records to success (including valid & invalid)")
 
 session.remove(inputFlowFile)

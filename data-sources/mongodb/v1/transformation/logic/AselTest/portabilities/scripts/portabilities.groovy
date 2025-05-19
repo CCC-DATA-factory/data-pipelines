@@ -2,121 +2,98 @@ import org.apache.commons.io.IOUtils
 import java.nio.charset.StandardCharsets
 import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
-import java.time.*
 import org.apache.nifi.processor.io.StreamCallback
+import java.time.*
 import org.apache.nifi.flowfile.FlowFile
-import org.apache.nifi.processor.Relationship
 
-// Setup
-def log = log
 def session = session
-def inheritedAttrs = ['filepath', 'database_name', 'collection_name']
+def log = log
 
-// Fetch incoming FlowFile
-FlowFile inFF = session.get()
-if (!inFF) return
+FlowFile inputFlowFile = session.get()
+if (!inputFlowFile) return
 
-// Read full JSON
-String raw = ''
-inFF = session.write(inFF, { InputStream is, OutputStream os ->
-    raw = IOUtils.toString(is, StandardCharsets.UTF_8)
-    os.write(raw.getBytes(StandardCharsets.UTF_8))
+def inputJson = ''
+inputFlowFile = session.write(inputFlowFile, { inputStream, outputStream ->
+    inputJson = IOUtils.toString(inputStream, StandardCharsets.UTF_8)
+    outputStream.write(inputJson.getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
-// Parse JSON array
-def parser = new JsonSlurper()
-List records
+def jsonSlurper = new JsonSlurper()
+def records
 try {
-    records = parser.parseText(raw)
-    if (!(records instanceof List)) throw new Exception("Expected JSON array of records")
-} catch(Exception e) {
+    records = jsonSlurper.parseText(inputJson)
+    if (!(records instanceof List)) {
+        log.error("Expected a list of objects but got: " + records.getClass().getName())
+        session.transfer(inputFlowFile, REL_FAILURE)
+        return
+    }
+} catch (Exception e) {
     log.error("Failed to parse input JSON", e)
-    inFF = session.putAttribute(inFF, 'error', "Invalid JSON: ${e.message}")
-    session.transfer(inFF, REL_FAILURE)
+    session.transfer(inputFlowFile, REL_FAILURE)
     return
 }
 
-// Prepare lists
-List valid = []
-List invalid = []
 ZoneId tunisZone = ZoneId.of("Africa/Tunis")
 long nowMillis = ZonedDateTime.now(tunisZone).toInstant().toEpochMilli()
 
-// Transformation per record
-records.eachWithIndex { rec, idx ->
-    def errs = []
-    if (!rec._id)      errs << '_id is required'
-    if (!rec.SIM)      errs << 'SIM is required'
-    if (!rec.customer) errs << 'customer is required'
-    if (!rec.code_rio) errs << 'code_rio is required'
+List outputRecords = []
 
-    // createdAt must be a Number (epoch‑ms UTC)
-    Long origEpoch = (rec.createdAt instanceof Number) ? rec.createdAt as Long : null
-    if (origEpoch == null) {
-        errs << 'createdAt must be a millisecond timestamp'
+records.each { record ->
+    def errorMessages = []
+    def createdMillis = null
+
+    // Handle createdAt with fallback to first_seen_date
+    if (record.createdAt instanceof Number) {
+        def utcMillis = record.createdAt as Long
+        createdMillis = ZonedDateTime.ofInstant(Instant.ofEpochMilli(utcMillis), ZoneOffset.UTC)
+                            .withZoneSameInstant(tunisZone)
+                            .toInstant().toEpochMilli()
+    } else if (record.first_seen_date instanceof Number) {
+        createdMillis = record.first_seen_date as Long
+    } else {
+        errorMessages << "Missing or invalid createdAt/first_seen_date"
     }
 
-    if (errs) {
-        rec._error = errs.join('; ')
-        rec._index = idx
-        invalid << rec
-        log.warn("Record $idx invalid: ${errs.join('; ')}")
-        return
-    }
-
-    // Convert UTC millis to Tunisian‐local millis
-    ZonedDateTime utcDt    = Instant.ofEpochMilli(origEpoch).atZone(ZoneOffset.UTC)
-    ZoneOffset    offset   = utcDt.getOffset()
-    long          localEpoch = origEpoch + offset.getTotalSeconds() * 1000L
-
-    // derive year/month/day from local‐time instant
-    ZonedDateTime localDt = Instant.ofEpochMilli(localEpoch).atZone(tunisZone)
-    int createdYear  = localDt.getYear()
-    int createdMonth = localDt.getMonthValue()
-    int createdDay   = localDt.getDayOfMonth()
+    // Required fields
+    if (!record._id) errorMessages << "_id missing"
+    if (!record.SIM) errorMessages << "SIM missing"
+    if (!record.customer) errorMessages << "customer missing"
+    if (!record.code_rio) errorMessages << "code_rio missing"
 
     // Build transformed record
-    def outRec = [
-        id                  : rec._id.toString(),
-        sim_id              : rec.SIM.toString(),
-        created_at          : localEpoch,
-        agent_id            : rec.agent ?: '',
-        old_number          : rec.old_number ?: '',
-        code_rio            : rec.code_rio,
-        current_operator    : rec.current_operator ?: '',
-        customer_id         : rec.customer.toString(),
-        mvno_id             : rec.mvno_id ? rec.mvno_id.toString() : '',
-        first_seen_date     : rec.first_seen_date,
-        ingestion_date      : rec.ingestion_date,
+    def dt = createdMillis ? Instant.ofEpochMilli(createdMillis).atZone(tunisZone) : null
+    def outputRec = [
+        id                  : record._id?.toString() ?: null,
+        sim_id              : record.SIM?.toString() ?: null,
+        created_at          : createdMillis ?: 0L,
+        agent_id            : record.agent ?: null,
+        old_number          : record.old_number ?: null,
+        code_rio            : record.code_rio ?: null,
+        current_operator    : record.current_operator ?: null,
+        customer_id         : record.customer?.toString() ?: null,
+        mvno_id             : record.mvno_id?.toString() ?: null,
+        first_seen_date     : record.first_seen_date ?: null,
+        ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowMillis,
-        source_system       : rec.source_system,
-        partition           : [ createdYear, createdMonth, createdDay ]
+        source_system       : record.source_system ?: null,
+        partition           : dt ? [ dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth() ] : null,
+        is_valid            : errorMessages.isEmpty(),
+        comment             : errorMessages ? errorMessages.join("; ") : null
     ]
-    valid << outRec
+
+    outputRecords << outputRec
 }
 
-// Branch helper
-def branch = { List list, Relationship rel, String tableName ->
-    if (!list) return
-    FlowFile ff = session.create(inFF)
-    ff = session.write(ff, { _, os ->
-        os.write(JsonOutput.toJson(list).getBytes(StandardCharsets.UTF_8))
-    } as StreamCallback)
-    def attrs = [:]
-    inheritedAttrs.each { k ->
-        def v = inFF.getAttribute(k)
-        if (v) attrs[k] = v
-    }
-    attrs['file.size']             = String.valueOf(JsonOutput.toJson(list).bytes.length)
-    attrs['records.count']         = String.valueOf(list.size())
-    attrs['target_iceberg_table_name'] = tableName
-    attrs.each { k,v -> ff = session.putAttribute(ff, k, v) }
-    session.transfer(ff, rel)
-}
+// Write all records (valid and invalid) to success
+FlowFile successFlowFile = session.create(inputFlowFile)
+successFlowFile = session.write(successFlowFile, { _ , out ->
+    out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
+} as StreamCallback)
 
-// Write valid and invalid
-branch(valid,   REL_SUCCESS, 'portability')
-branch(invalid, REL_FAILURE, 'portability_failed')
+successFlowFile = session.putAttribute(successFlowFile, "target_iceberg_table_name", "portability")
+successFlowFile = session.putAttribute(successFlowFile, "schema.name", "portability_in")
+successFlowFile = session.putAttribute(successFlowFile, "record.count", outputRecords.size().toString())
 
-// Remove original
-session.remove(inFF)
+session.transfer(successFlowFile, REL_SUCCESS)
+session.remove(inputFlowFile)
+log.info("Transferred ${outputRecords.size()} portability records with validation flags")

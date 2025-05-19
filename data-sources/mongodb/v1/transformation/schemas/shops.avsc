@@ -6,6 +6,7 @@
     { "name": "_id", "type": ["null", "string"], "default": null },
     { "name": "name", "type": ["null", "string"], "default": null },
     { "name": "owner", "type": ["null", "string"], "default": null },
+    { "name": "reseller_id" , "type": ["null", "string"], "default": null },
     { "name": "latitude", "type": ["null", "double"], "default": null },
     { "name": "longitude", "type": ["null", "double"], "default": null },
     { "name": "adresse", "type": ["null", "string"], "default": null },

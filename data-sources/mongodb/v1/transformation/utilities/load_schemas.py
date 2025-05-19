@@ -30,7 +30,23 @@ COMMON_METADATA_FIELDS = [
         "name": "source_system",
         "type": ["null", "string"],
         "default": None
+    },
+    {
+        "name": "is_valid",
+        "type": "boolean",
+        "default": True
+    },
+    {
+        "name": "comment",
+        "type": ["null", "string"],
+        "default": None
+    },
+    {
+        "name": "partition",
+        "type": ["null", {"type": "array", "items": ["string", "int", "double"]}],
+        "default": None
     }
+
 ]
 
 

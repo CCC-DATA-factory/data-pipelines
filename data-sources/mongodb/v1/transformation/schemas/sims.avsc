@@ -16,7 +16,6 @@
         "logicalType": "timestamp-millis"
       }
     },
-    { "name": "customer_id", "type": "string" },
-    { "name": "partition", "type": "string" }
+    { "name": "customer_id", "type": "string" }
   ]
 }
