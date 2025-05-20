@@ -3,9 +3,8 @@ import groovy.lang.GroovyShell
 import org.apache.nifi.flowfile.FlowFile
 import java.io.File
 
-// 1) Fetch exactly one FlowFile
 FlowFile flowFile = session.get()
-if (flowFile == null) return  // nothing to do
+if (flowFile == null) return  
 
 // 2) Resolve your relationships
 def REL_SUCCESS = context.getAvailableRelationships().find { it.getName() == 'success' }
@@ -31,14 +30,11 @@ try {
         REL_FAILURE : REL_FAILURE
     ])
 
-    // 5) Execute the external script (it must clone & transfer two outputs)
     new GroovyShell(binding).evaluate(scriptText)
 
-    // 6) Remove the original FlowFile (all work is done on its clones)
     session.remove(flowFile)
 
 } catch (Exception e) {
-    // 7) On any error, attach the message and route to failure
     log.error("Script failure for ${flowFile.getAttribute('script-path')}: ${e.message}", e)
     flowFile = session.putAttribute(flowFile, 'script.error', e.message)
     session.transfer(flowFile, REL_FAILURE)
