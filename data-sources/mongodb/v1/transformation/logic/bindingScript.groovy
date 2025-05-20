@@ -12,7 +12,7 @@ def REL_FAILURE = context.getAvailableRelationships().find { it.getName() == 'fa
 
 try {
     // 3) Normalize and load the external script
-    def rawPath = flowFile.getAttribute('script-path')
+    def rawPath = flowFile.getAttribute('transformation.script.path')
     if (!rawPath) throw new Exception("Missing script-path attribute")
     def scriptPath = rawPath.replace("\\", "/")  // win→unix
     def scriptFile = new File(scriptPath)
@@ -35,7 +35,7 @@ try {
     session.remove(flowFile)
 
 } catch (Exception e) {
-    log.error("Script failure for ${flowFile.getAttribute('script-path')}: ${e.message}", e)
+    log.error("Script failure for ${flowFile.getAttribute('transformation.script.path')}: ${e.message}", e)
     flowFile = session.putAttribute(flowFile, 'script.error', e.message)
     session.transfer(flowFile, REL_FAILURE)
 }
