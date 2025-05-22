@@ -5,6 +5,7 @@
   "fields": [
     { "name": "id", "type": ["null", "string"], "default": null },
     { "name": "name", "type": ["null", "string"], "default": null },
+    { "name": "shop_name", "type": ["null", "string"], "default": null },
     {
       "name": "joined_at",
       "type": ["null",
