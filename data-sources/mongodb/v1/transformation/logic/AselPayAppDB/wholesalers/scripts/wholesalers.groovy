@@ -83,4 +83,3 @@ if (!mergedRecords.isEmpty()) {
     log.info("Transferred ${mergedRecords.size()} records (valid + invalid) to success")
 }
 
-session.remove(flowFile)

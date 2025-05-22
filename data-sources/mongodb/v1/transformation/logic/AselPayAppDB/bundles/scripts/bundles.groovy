@@ -163,4 +163,4 @@ def branch = { List data, Relationship rel, String tableName ->
 }
 
 branch(allBundles,        REL_SUCCESS, 'bundles')
-branch(allPriceHistories, REL_SUCCESS, 'bundles_price_history')
+branch(allPriceHistories, REL_SUCCESS, 'bundle_price_history')
