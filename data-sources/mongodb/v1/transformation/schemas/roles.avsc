@@ -3,9 +3,9 @@
   "name": "ProcessedRole",
   "namespace": "processed",
   "fields": [
-    { "name": "id", "type": "string" },
-    { "name": "id_user", "type": "string" },
-    { "name": "role", "type": "string" },
+    { "name": "id", "type": ["null", "string"], "default": null },
+    { "name": "id_user", "type": ["null", "string"], "default": null },
+    { "name": "role", "type": ["null", "string"], "default": null },
     {
       "name": "parent_id",
       "type": ["null", "string"],

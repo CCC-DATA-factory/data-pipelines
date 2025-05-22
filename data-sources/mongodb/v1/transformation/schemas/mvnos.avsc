@@ -3,7 +3,7 @@
   "name": "MVNO",
   "namespace": "processed",
   "fields": [
-    { "name": "id", "type": "string" },
-    { "name": "name", "type": "string" }
+    { "name": "id", "type": ["null", "string"], "default": null },
+    { "name": "name", "type": ["null", "string"], "default": null }
   ]
 }

@@ -11,7 +11,6 @@ import org.apache.nifi.flowfile.FlowFile
 def inheritedAttrs = ['filepath', 'database_name', 'collection_name']
 
 
-
 // Read JSON string from input stream
 String raw = ''
 flowFile = session.write(flowFile, { inputStream, outputStream ->
@@ -37,33 +36,36 @@ List outputRecords = []
 records.eachWithIndex { rec, idx ->
     def errs = []
 
-    // Validation
-    if (!rec._id) errs << '_id is required'
-    if (!rec.name) errs << 'name is required'
-    if (rec.first_seen_date == null) errs << 'first_seen_date is required'
+    def id = rec._id?.toString()
+    def name = rec.name?.toString()
+    def firstSeen = rec.first_seen_date
+    def ingestionDate = rec.ingestion_date
+    def sourceSystem = rec.source_system
 
-    // joined_at parsing
+    if (!id) errs << '_id is required'
+    if (!name) errs << 'name is required'
+    if (firstSeen == null) errs << 'first_seen_date is required'
+
     long joinedAt = 0L
-    if (rec.first_seen_date != null) {
+    if (firstSeen != null) {
         try {
-            joinedAt = rec.first_seen_date instanceof Number ? rec.first_seen_date.longValue()
-                    : rec.first_seen_date.toString().toLong()
+            joinedAt = firstSeen instanceof Number ? firstSeen.longValue() : firstSeen.toString().toLong()
         } catch (Exception e) {
-            errs << "Invalid first_seen_date value: ${rec.first_seen_date}"
+            errs << "Invalid first_seen_date value: ${firstSeen}"
         }
     }
 
     def outRec = [
-        id                  : rec._id?.toString(),
-        name                : rec.name?.toString(),
+        id                  : id ?: null,
+        name                : name ?: null,
         role                : 'reseller',
         parent_id           : null,
         shop_name           : null,
         joined_at           : joinedAt,
-        first_seen_date     : rec.first_seen_date,
-        ingestion_date      : rec.ingestion_date,
+        first_seen_date     : firstSeen ?: null,
+        ingestion_date      : ingestionDate ?: null,
         transformation_date : nowMillis,
-        source_system       : rec.source_system,
+        source_system       : sourceSystem ?: null,
         is_valid            : errs.isEmpty(),
         comment             : errs ? errs.join('; ') : null,
         partition           : null

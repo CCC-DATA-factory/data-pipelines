@@ -9,16 +9,14 @@ import org.apache.nifi.flowfile.FlowFile
 
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
 
-
-
-// 2) Read full JSON payload
+// Read full JSON
 String inputJson = ''
 flowFile = session.write(flowFile, { inputStream, outputStream ->
     inputJson = IOUtils.toString(inputStream, StandardCharsets.UTF_8)
     outputStream.write(inputJson.getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
-// 3) Parse JSON array
+// Parse JSON array
 def parser = new JsonSlurper()
 def records
 try {
@@ -36,16 +34,16 @@ try {
     return
 }
 
-// 4) Compute “now” in Tunis
+// Compute now in Tunis timezone
 ZoneId tunis = ZoneId.of("Africa/Tunis")
 long nowMillis = ZonedDateTime.now(tunis).toInstant().toEpochMilli()
 
-// 5) Transform each record
+// Transform each record
 List transformed = []
 records.eachWithIndex { rec, idx ->
     def error = null
 
-    // a) Validate
+    // Validate required fields
     if (!(rec._id instanceof String)) {
         error = "_id must be a string"
     } else if (rec.rejected_At != null) {
@@ -58,14 +56,17 @@ records.eachWithIndex { rec, idx ->
         error = "transactionAmount.amount must be a number"
     }
 
-    // b) Parse createdAt (number or ISO string) or fallback
+    // Parse createdAt
     Long createdAt = null
     if (!error) {
         if (rec.createdAt instanceof Number) {
             createdAt = (rec.createdAt as Number).longValue()
         } else if (rec.createdAt instanceof String) {
-            try { createdAt = Instant.parse(rec.createdAt).toEpochMilli() }
-            catch(_) { createdAt = null }
+            try {
+                createdAt = Instant.parse(rec.createdAt).toEpochMilli()
+            } catch (_) {
+                createdAt = null
+            }
         }
         if (createdAt == null && rec.first_seen_date instanceof Number) {
             createdAt = (rec.first_seen_date as Number).longValue()
@@ -75,7 +76,7 @@ records.eachWithIndex { rec, idx ->
         }
     }
 
-    // c) Build base output
+    // Build transformed output
     def out = [
         id                : rec._id ?: null,
         sender_id         : rec.sender ?: null,
@@ -90,7 +91,7 @@ records.eachWithIndex { rec, idx ->
         comment           : error
     ]
 
-    // d) Add partition (always include; null if no createdAt)
+    // Add partition
     if (createdAt != null) {
         def dt = Instant.ofEpochMilli(createdAt).atZone(tunis)
         out.partition = [dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth()]
@@ -105,13 +106,13 @@ records.eachWithIndex { rec, idx ->
     }
 }
 
-// 6) Always write out _all_ records
+// Write output
 FlowFile outFF = session.create(flowFile)
 outFF = session.write(outFF, { _, os ->
     os.write(JsonOutput.toJson(transformed).getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
-// 7) Copy inherited attrs + metadata
+// Copy inherited attrs + metadata
 def attrs = [:]
 inheritedAttributes.each { k ->
     flowFile.getAttribute(k)?.with { attrs[k] = it }
@@ -123,6 +124,6 @@ attrs['target_iceberg_table_name'] = 'transactions'
 attrs['schema.name'] = 'transactions'
 attrs.each { k, v -> outFF = session.putAttribute(outFF, k, v) }
 
-// 8) Transfer and cleanup
+// Transfer output
 session.transfer(outFF, REL_SUCCESS)
-log.info("Transferred ${transformed.size()} records (valid + invalid)")  
+log.info("Transferred ${transformed.size()} records (valid + invalid)")

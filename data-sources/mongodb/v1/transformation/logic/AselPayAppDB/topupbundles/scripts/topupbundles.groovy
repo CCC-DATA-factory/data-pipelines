@@ -7,6 +7,7 @@ import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.flowfile.FlowFile
 
 
+
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
 
 
@@ -36,81 +37,87 @@ try {
     return
 }
 
+// Current time in Tunis timezone
 long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
 
-// Prepare combined output list
 List outputRecords = []
 
 records.eachWithIndex { record, idx ->
     def errors = []
-    // Original validation logic
+
+    // Validate required fields
     if (!(record._id instanceof String)) {
         errors << "_id must be a string"
-    } else if (!(record.retailer instanceof String)) {
+    }
+    if (!(record.retailer instanceof String)) {
         errors << "retailer must be a string"
-    } else if (!(record.bundle instanceof String)) {
+    }
+    if (!(record.bundle instanceof String)) {
         errors << "bundle must be a string"
-    } else if (!(record.SIM instanceof String)) {
+    }
+    if (!(record.SIM instanceof String)) {
         errors << "SIM must be a string"
     }
 
-    def createdAtMillis = null
+    // Parse or default createdAt
+    Long createdAtMillis = null
     if (record.createdAt instanceof Number) {
         createdAtMillis = (record.createdAt as Number).longValue()
     } else if (record.first_seen_date instanceof Number) {
         createdAtMillis = (record.first_seen_date as Number).longValue()
     } else {
-        // fallback to now if neither present
         createdAtMillis = nowTunisMillis
     }
 
-    // Original transform logic for valid records
-    def transformed = [:]
-    if (errors.isEmpty()) {
-        def dt = Instant.ofEpochMilli(createdAtMillis).atZone(ZoneId.of("Africa/Tunis"))
-        def shop = (record.shopName ?: "Unknown").toString()
-        transformed = [
-            id                  : record._id,
-            retailer_id         : record.retailer,
-            sim_id              : record.SIM,
-            bundle_id           : record.bundle,
-            shopName            : shop,
-            mvno_id             : record.MVNO ?: null,
-            createdAt           : createdAtMillis,
-            first_seen_date     : record.first_seen_date ?: null,
-            ingestion_date      : record.ingestion_date ?: null,
-            transformation_date : nowTunisMillis,
-            source_system       : record.source_system ?: null,
-            created_year        : dt.getYear(),
-            created_month       : dt.getMonthValue(),
-            created_day         : dt.getDayOfMonth(),
-            partition           : [ dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth(), shop ],
-            is_valid            : errors.isEmpty(),
-            comment             : errors.isEmpty() ? null : errors.join('; ')
-        ]
-    }
+    // Derive date parts and normalize shopName
+    def dt = Instant.ofEpochMilli(createdAtMillis).atZone(ZoneId.of("Africa/Tunis"))
+    int createdYear = dt.getYear()
+    int createdMonth = dt.getMonthValue()
+    int createdDay = dt.getDayOfMonth()
+    String shop = (record.shopName ?: "Unknown").toString()
+
+    // Build transformed fields
+    def transformed = [
+        id                  : (record._id instanceof String) ? record._id : null,
+        retailer_id         : (record.retailer instanceof String) ? record.retailer : null,
+        sim_id              : (record.SIM instanceof String) ? record.SIM : null,
+        bundle_id           : (record.bundle instanceof String) ? record.bundle : null,
+        shopName            : shop,
+        mvno_id             : record.MVNO ?: null,
+        createdAt           : createdAtMillis,
+        first_seen_date     : record.first_seen_date ?: null,
+        ingestion_date      : record.ingestion_date ?: null,
+        transformation_date : nowTunisMillis,
+        source_system       : record.source_system ?: null,
+        created_year        : createdYear,
+        created_month       : createdMonth,
+        created_day         : createdDay,
+        partition           : [createdYear, createdMonth, createdDay, shop],
+        is_valid            : errors.isEmpty(),
+        comment             : errors.isEmpty() ? null : errors.join('; ')
+    ]
 
     outputRecords << transformed
 }
 
-// Create new FlowFile for combined output
+// Write combined output to success
 FlowFile outputFlowFile = session.create(flowFile)
 outputFlowFile = session.write(outputFlowFile, { _ , out ->
     out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
-// Inherit attributes
+// Inherit and set attributes
+def newAttributes = [:]
 inheritedAttributes.each { attr ->
-    flowFile.getAttribute(attr)?.with { outputFlowFile = session.putAttribute(outputFlowFile, attr, it) }
+    def val = flowFile.getAttribute(attr)
+    if (val) newAttributes[attr] = val
 }
-
-// Add metadata attributes
 def jsonBytes = JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8)
-outputFlowFile = session.putAttribute(outputFlowFile, 'file.size', jsonBytes.length.toString())
-outputFlowFile = session.putAttribute(outputFlowFile, 'records.count', outputRecords.size().toString())
-outputFlowFile = session.putAttribute(outputFlowFile, 'target_iceberg_table_name', 'topupbundles')
-outputFlowFile = session.putAttribute(outputFlowFile, 'schema.name', 'topupbundles')
+newAttributes['file.size'] = String.valueOf(jsonBytes.length)
+newAttributes['records.count'] = String.valueOf(outputRecords.size())
+newAttributes['target_iceberg_table_name'] = "topupbundles"
+newAttributes['schema.name'] = "topupbundles"
+newAttributes.each { k, v -> outputFlowFile = session.putAttribute(outputFlowFile, k, v) }
 
-// Transfer combined output and remove original
 session.transfer(outputFlowFile, REL_SUCCESS)
-log.info("Transferred ${outputRecords.size()} records (valid & invalid) with validation flags")
+log.info("Transferred ${outputRecords.size()} records with validation flags (valid and invalid combined)")

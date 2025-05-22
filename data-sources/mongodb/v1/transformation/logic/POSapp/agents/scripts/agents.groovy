@@ -10,18 +10,17 @@ import org.apache.nifi.flowfile.FlowFile
 
 def inheritedAttrs = ['filepath', 'database_name', 'collection_name']
 
-
-
-def rawJson = ''
+// Read input JSON safely
+String rawJson = ''
 flowFile = session.write(flowFile, { inputStream, outputStream ->
     rawJson = IOUtils.toString(inputStream, StandardCharsets.UTF_8)
     outputStream.write(rawJson.getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
-def parser = new JsonSlurper()
+// Parse JSON array
 List records
 try {
-    records = parser.parseText(rawJson)
+    records = new JsonSlurper().parseText(rawJson)
     if (!(records instanceof List)) {
         throw new Exception("Expected JSON array of records")
     }
@@ -37,46 +36,47 @@ List outputRecords = []
 
 records.eachWithIndex { rec, idx ->
     def errs = []
-    if (!rec._id)         errs << '_id is required'
-    if (!rec.first_name)  errs << 'first_name is required'
-    if (!rec.last_name)   errs << 'last_name is required'
+    def id = rec._id?.toString() ?: null
+    def firstName = rec.first_name?.toString()?.trim() ?: null
+    def lastName = rec.last_name?.toString()?.trim() ?: null
+    def name = (firstName ?: '') + ' ' + (lastName ?: '')
+    def parentId = rec.reseller?.toString() ?: null
+    def shopName = null
+    def joinedAt = null
+    def joinedRaw = rec.created_at ?: rec.first_seen_date
+    
+    if (id == null) errs << '_id is required'
+    if (firstName == null) errs << 'first_name is required'
+    if (lastName == null) errs << 'last_name is required'
 
-    long joinedAt = 0L
-    if (rec.created_at != null) {
+    if (joinedRaw != null) {
         try {
-            joinedAt = rec.created_at instanceof Number ? rec.created_at.longValue() : rec.created_at.toString().toLong()
+            joinedAt = joinedRaw instanceof Number ? joinedRaw.longValue() : joinedRaw.toString().toLong()
         } catch(Exception e) {
-            errs << "Invalid created_at value: ${rec.created_at}"
-        }
-    } else if (rec.first_seen_date != null) {
-        try {
-            joinedAt = rec.first_seen_date instanceof Number ? rec.first_seen_date.longValue() : rec.first_seen_date.toString().toLong()
-        } catch(Exception e) {
-            errs << "Invalid first_seen_date value: ${rec.first_seen_date}"
+            errs << "Invalid timestamp value: ${joinedRaw}"
         }
     } else {
         errs << 'Either created_at or first_seen_date must be present'
     }
 
-    def isValid = errs.isEmpty()
     def outRec = [
-        id                  : rec._id?.toString(),
-        name                : (rec.first_name?.toString()?.trim() ?: "") + " " + (rec.last_name?.toString()?.trim() ?: ""),
+        id                  : id,
+        name                : name,
         role                : 'agent',
-        parent_id           : rec.reseller?.toString(),
-        shop_name           : null,
+        parent_id           : parentId,
+        shop_name           : shopName,
         joined_at           : joinedAt,
-        first_seen_date     : rec.first_seen_date,
-        ingestion_date      : rec.ingestion_date,
+        first_seen_date     : rec.first_seen_date ?: null,
+        ingestion_date      : rec.ingestion_date ?: null,
         transformation_date : nowMillis,
-        source_system       : rec.source_system,
-        is_valid            : isValid,
-        comment             : isValid ? null : errs.join('; '),
+        source_system       : rec.source_system ?: null,
+        is_valid            : errs.isEmpty(),
+        comment             : errs.isEmpty() ? null : errs.join('; '),
         partition           : null
     ]
     outputRecords << outRec
 
-    if (!isValid) log.warn("Record $idx invalid: ${errs.join('; ')}")
+    if (!errs.isEmpty()) log.warn("Record $idx invalid: ${errs.join('; ')}")
 }
 
 FlowFile outFF = session.create(flowFile)
@@ -84,16 +84,18 @@ outFF = session.write(outFF, { out ->
     out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
 } as OutputStreamCallback)
 
+// Copy attributes and attach metadata
 def attrs = [:]
 inheritedAttrs.each { k ->
     def v = flowFile.getAttribute(k)
-    if (v) attrs[k] = v
+    if (v != null) attrs[k] = v
 }
 def jsonBytes = JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8)
-attrs['file.size'] = String.valueOf(jsonBytes.length)
-attrs['records.count'] = String.valueOf(outputRecords.size())
+attrs['file.size'] = jsonBytes.length.toString()
+attrs['records.count'] = outputRecords.size().toString()
 attrs['target_iceberg_table_name'] = "sallers"
-attrs["schema.name"] =  "sallers"
+attrs['schema.name'] = "sallers"
 attrs.each { k,v -> outFF = session.putAttribute(outFF, k, v) }
 
 session.transfer(outFF, REL_SUCCESS)
+log.info("Transferred ${outputRecords.size()} total records to success (valid + invalid, with fixed schema)")

@@ -7,7 +7,6 @@ import java.time.*
 import org.apache.nifi.flowfile.FlowFile
 
 
-
 def inputJson = ''
 flowFile = session.write(flowFile, { inputStream, outputStream ->
     inputJson = IOUtils.toString(inputStream, StandardCharsets.UTF_8)
@@ -38,7 +37,6 @@ records.each { record ->
     def errorMessages = []
     def createdMillis = null
 
-    // Parse createdAt or fallback to first_seen_date
     if (record.createdAt instanceof Number) {
         def utcMillis = record.createdAt as Long
         createdMillis = ZonedDateTime.ofInstant(Instant.ofEpochMilli(utcMillis), ZoneOffset.UTC)
@@ -50,31 +48,31 @@ records.each { record ->
         errorMessages << "Missing or invalid createdAt/first_seen_date"
     }
 
-    // Required field checks
+    // Always initialize all fields, even if validation fails
+    def outputRec = [
+        id                  : record._id ?: null,
+        commercial_id       : record.commercial ?: null,
+        franchise_id        : record.franchise ?: null,
+        transaction_id      : record.transaction ?: null,
+        amount              : record.amount != null ? (record.amount instanceof Number ? record.amount.toDouble() : record.amount.toString().toDouble()) : null,
+        created_at          : createdMillis,
+        first_seen_date     : record.first_seen_date ?: null,
+        ingestion_date      : record.ingestion_date ?: null,
+        transformation_date : nowMillis,
+        source_system       : record.source_system ?: null,
+        partition           : createdMillis != null ? [
+                                Instant.ofEpochMilli(createdMillis).atZone(tunisZone).getYear(),
+                                Instant.ofEpochMilli(createdMillis).atZone(tunisZone).getMonthValue(),
+                                Instant.ofEpochMilli(createdMillis).atZone(tunisZone).getDayOfMonth()
+                              ] : null
+    ]
+
+    // Validation rules
     if (!record._id) errorMessages << "_id missing"
     if (!record.commercial) errorMessages << "commercial missing"
     if (!record.franchise) errorMessages << "franchise missing"
     if (!record.transaction) errorMessages << "transaction missing"
     if (record.amount == null) errorMessages << "amount missing"
-
-    // Build transformed output
-    def outputRec = [:]
-    if (errorMessages.isEmpty()) {
-        def dt = Instant.ofEpochMilli(createdMillis).atZone(tunisZone)
-        outputRec = [
-            id                  : record._id,
-            commercial_id       : record.commercial,
-            franchise_id        : record.franchise,
-            transaction_id      : record.transaction,
-            amount              : (record.amount instanceof Number) ? record.amount.toDouble() : record.amount.toString().toDouble(),
-            created_at          : createdMillis,
-            first_seen_date     : record.first_seen_date ?: null,
-            ingestion_date      : record.ingestion_date ?: null,
-            transformation_date : nowMillis,
-            source_system       : record.source_system ?: null,
-            partition           : [ dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth() ]
-        ]
-    }
 
     // Add validation flags
     outputRec['is_valid'] = errorMessages.isEmpty()

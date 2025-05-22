@@ -4,12 +4,8 @@ import org.apache.nifi.processor.io.StreamCallback
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-
-
-// Get current Tunis timestamp
 long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
 
-// Read and parse input JSON
 String inputJson = ''
 flowFile = session.write(flowFile, { inputStream, outputStream ->
     inputJson = inputStream.getText('UTF-8')
@@ -28,39 +24,32 @@ records.each { record ->
     def name = record['name']
     def isValid = false
     def comment = null
-    def transformed = [:]
+
+    // Initialize all fields with existing or null values
+    def transformed = [
+        id                  : (id != null ? id.toString() : null),
+        name                : (name ?: null),
+        first_seen_date     : record.first_seen_date ?: null,
+        ingestion_date      : record.ingestion_date ?: null,
+        transformation_date : nowTunisMillis,
+        source_system       : record.source_system ?: null,
+        partition           : null
+    ]
 
     // Validation rules
     if ((id instanceof Integer || (id instanceof String && id.isInteger())) &&
         name instanceof String && name?.trim()) {
-        // valid
         isValid = true
-        // Convert id to string
-        def idStr = id.toString()
-        // Transformation logic
-        transformed = [
-            id                  : idStr,
-            name                : name,
-            first_seen_date     : record.first_seen_date ?: null,
-            ingestion_date      : record.ingestion_date ?: null,
-            transformation_date : nowTunisMillis,
-            source_system       : record.source_system ?: null,
-            partition           : null
-        ]
     } else {
-        // invalid
         isValid = false
         comment = "Invalid id or name"
     }
 
-    // Build output record: merge original or transformed fields
-    def outRec = new LinkedHashMap<>(transformed)
-
     // Add validation attributes
-    outRec['is_valid'] = isValid
-    outRec['comment'] = comment
+    transformed['is_valid'] = isValid
+    transformed['comment'] = comment
 
-    outputRecords << outRec
+    outputRecords << transformed
 }
 
 // Write combined JSON to new FlowFile and transfer
@@ -69,4 +58,3 @@ resultFlowFile = session.write(resultFlowFile, { _ ,outStream ->
     outStream.write(JsonOutput.toJson(outputRecords).getBytes('UTF-8'))
 } as StreamCallback)
 session.transfer(resultFlowFile, REL_SUCCESS)
-

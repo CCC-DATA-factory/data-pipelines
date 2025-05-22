@@ -6,10 +6,7 @@ import java.time.*
 import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.flowfile.FlowFile
 
-
-
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
-
 
 
 // Read full JSON
@@ -42,6 +39,14 @@ long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().t
 
 List outputRecords = []
 
+def parseDateMillis = { str ->
+    try {
+        return Instant.parse(str).toEpochMilli()
+    } catch (Exception e) {
+        return null
+    }
+}
+
 records.eachWithIndex { record, idx ->
     def errors = []
 
@@ -49,52 +54,50 @@ records.eachWithIndex { record, idx ->
     if (!(record._id instanceof String)) {
         errors << "_id must be a string"
     }
+    if (!(record.reloadAmount?.amount instanceof Number)) {
+        errors << "reloadAmount.amount is missing or not a number"
+    }
     if (!(record.retailer instanceof String)) {
         errors << "retailer must be a string"
-    }
-    if (!(record.bundle instanceof String)) {
-        errors << "bundle must be a string"
     }
     if (!(record.SIM instanceof String)) {
         errors << "SIM must be a string"
     }
 
-    // Parse or default createdAt
+    // Parse createdAt or fallback
     Long createdAtMillis = null
-    if (record.createdAt instanceof Number) {
-        createdAtMillis = (record.createdAt as Number).longValue()
-    } else if (record.first_seen_date instanceof Number) {
+    if (record.createdAt instanceof String) {
+        createdAtMillis = parseDateMillis(record.createdAt)
+    }
+    if (!createdAtMillis && record.first_seen_date instanceof Number) {
         createdAtMillis = (record.first_seen_date as Number).longValue()
-    } else {
+    }
+    if (!createdAtMillis) {
         createdAtMillis = nowTunisMillis
     }
 
-    // Derive date parts and normalize shopName
     def dt = Instant.ofEpochMilli(createdAtMillis).atZone(ZoneId.of("Africa/Tunis"))
     int createdYear = dt.getYear()
     int createdMonth = dt.getMonthValue()
     int createdDay = dt.getDayOfMonth()
     String shop = (record.shopName ?: "Unknown").toString()
 
-    // Build transformed fields
+    // Build unified output schema
     def transformed = [
-        id                  : record._id ?: null,
-        retailer_id         : record.retailer ?: null,
-        sim_id              : record.SIM ?: null,
-        bundle_id           : record.bundle ?: null,
-        shopName            : shop,
+        id                  : (record._id instanceof String) ? record._id : null,
+        retailer_id         : (record.retailer instanceof String) ? record.retailer : null,
+        sim_id              : (record.SIM instanceof String) ? record.SIM : null,
+        shopName            : record.shopName ?: null,
         mvno_id             : record.MVNO ?: null,
         createdAt           : createdAtMillis,
+        amount              : (record.reloadAmount?.amount instanceof Number) ? (record.reloadAmount.amount as Number).toDouble() : null,
         first_seen_date     : record.first_seen_date ?: null,
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowTunisMillis,
         source_system       : record.source_system ?: null,
-        created_year        : createdYear,
-        created_month       : createdMonth,
-        created_day         : createdDay,
-        partition           : [createdYear, createdMonth, createdDay, shop],
         is_valid            : errors.isEmpty(),
-        comment             : errors.isEmpty() ? null : errors.join('; ')
+        comment             : errors.isEmpty() ? null : errors.join('; '),
+        partition           : [createdYear, createdMonth, createdDay, shop]
     ]
 
     outputRecords << transformed
@@ -112,11 +115,12 @@ inheritedAttributes.each { attr ->
     def val = flowFile.getAttribute(attr)
     if (val) newAttributes[attr] = val
 }
+
 def jsonBytes = JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8)
 newAttributes['file.size'] = String.valueOf(jsonBytes.length)
 newAttributes['records.count'] = String.valueOf(outputRecords.size())
-newAttributes['target_iceberg_table_name'] = "topupbundles"
-newAttributes['schema.name'] = "topupbundles"
+newAttributes['target_iceberg_table_name'] = "topuplights"
+newAttributes['schema.name'] = "topuplights"
 newAttributes.each { k, v -> outputFlowFile = session.putAttribute(outputFlowFile, k, v) }
 
 session.transfer(outputFlowFile, REL_SUCCESS)

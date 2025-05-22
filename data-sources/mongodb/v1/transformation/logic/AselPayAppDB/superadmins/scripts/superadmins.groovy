@@ -8,8 +8,6 @@ import org.apache.nifi.flowfile.FlowFile
 
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
 
-
-
 // Read input JSON
 String inputJson = ''
 flowFile = session.write(flowFile, { inputStream, outputStream ->
@@ -42,54 +40,50 @@ List outputRecords = []
 
 records.eachWithIndex { record, idx ->
     def errors = []
-    // Existing validation logic
-    if (!(record._id instanceof String)) {
-        errors << "_id must be a string"
-    } else if (!(record.user instanceof String)) {
-        errors << "user must be a string"
-    }
-    // Build base record map (merge original and transformed fields)
-    def outRec = new LinkedHashMap<>(record)
-    // Add transformation_date for all
-    outRec['transformation_date'] = nowTunisMillis
-    // Add additional fields for valid records
-    if (errors.isEmpty()) {
-        outRec['id'] = record._id
-        outRec['id_user'] = record.user
-        outRec['role'] = "superadmin"
-        outRec['parent_id'] = null
-        outRec['first_seen_date'] = record.first_seen_date ?: null
-        outRec['ingestion_date'] = record.ingestion_date ?: null
-        outRec['source_system'] = record.source_system ?: null
-        outRec['partition'] =  null
 
-    }
-    // Attach validation metadata
-    outRec['is_valid'] = errors.isEmpty()
-    outRec['comment'] = errors.isEmpty() ? null : errors.join('; ')
+    def id = (record._id instanceof String) ? record._id : null
+    def user = (record.user instanceof String) ? record.user : null
+    if (!id) errors << "_id missing or invalid"
+    if (!user) errors << "user missing or invalid"
 
-    outputRecords << outRec
+    def transformed = [
+        id                  : id,
+        id_user             : user,
+        role                : "superadmin",
+        parent_id           : null,
+        first_seen_date     : record.first_seen_date ?: null,
+        ingestion_date      : record.ingestion_date ?: null,
+        source_system       : record.source_system ?: null,
+        partition           : null,
+        transformation_date : nowTunisMillis,
+        is_valid            : errors.isEmpty(),
+        comment             : errors.isEmpty() ? null : errors.join('; ')
+    ]
+
+    if (!errors.isEmpty()) {
+        log.warn("Invalid record at index ${idx}: ${errors.join('; ')}")
+    }
+
+    outputRecords << transformed
 }
 
 // Create output FlowFile for combined records
 FlowFile outputFlowFile = session.create(flowFile)
-outputFlowFile = session.write(outputFlowFile, { _ , out ->
+outputFlowFile = session.write(outputFlowFile, { _, out ->
     out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
 // Inherit attributes
-def newAttributes = [:]
 inheritedAttributes.each { attr ->
-    def val = flowFile.getAttribute(attr)
-    if (val != null) newAttributes[attr] = val
+    flowFile.getAttribute(attr)?.with { outputFlowFile = session.putAttribute(outputFlowFile, attr, it) }
 }
+
 // Set metadata attributes
 def jsonBytes = JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8)
-newAttributes['file.size'] = String.valueOf(jsonBytes.length)
-newAttributes['records.count'] = String.valueOf(outputRecords.size())
-newAttributes['target_iceberg_table_name'] = "roles"
-newAttributes['schema.name'] = "roles"
-newAttributes.each { k, v -> outputFlowFile = session.putAttribute(outputFlowFile, k, v) }
+outputFlowFile = session.putAttribute(outputFlowFile, 'file.size', String.valueOf(jsonBytes.length))
+outputFlowFile = session.putAttribute(outputFlowFile, 'records.count', String.valueOf(outputRecords.size()))
+outputFlowFile = session.putAttribute(outputFlowFile, 'target_iceberg_table_name', 'roles')
+outputFlowFile = session.putAttribute(outputFlowFile, 'schema.name', 'roles')
 
 // Transfer and cleanup
 session.transfer(outputFlowFile, REL_SUCCESS)

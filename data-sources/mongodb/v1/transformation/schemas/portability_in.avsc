@@ -3,20 +3,18 @@
   "name": "Portability",
   "namespace": "processed",
   "fields": [
-    { "name": "id", "type": "string" },
-    { "name": "sim_id", "type": "string" },
+    { "name": "id", "type": ["null", "string"], "default": null },
+    { "name": "sim_id", "type": ["null", "string"], "default": null },
     {
       "name": "created_at",
-      "type": {
-        "type": "long",
-        "logicalType": "timestamp-millis"
-      }
+      "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }],
+      "default": null
     },
-    { "name": "agent_id", "type": "string" },
-    { "name": "old_number", "type": "string" },
-    { "name": "code_rio", "type": "string" },
-    { "name": "current_operator", "type": "string" },
-    { "name": "customer_id", "type": "string" },
-    { "name": "mvno_id", "type": "string" }
+    { "name": "agent_id", "type": ["null", "string"], "default": null },
+    { "name": "old_number", "type": ["null", "string"], "default": null },
+    { "name": "code_rio", "type": ["null", "string"], "default": null },
+    { "name": "current_operator", "type": ["null", "string"], "default": null },
+    { "name": "customer_id", "type": ["null", "string"], "default": null },
+    { "name": "mvno_id", "type": ["null", "string"], "default": null }
   ]
 }

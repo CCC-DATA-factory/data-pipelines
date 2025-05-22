@@ -60,7 +60,7 @@ records.each { record ->
     def outputRec = [
         id                  : record._id?.toString() ?: null,
         sim_id              : record.SIM?.toString() ?: null,
-        created_at          : createdMillis ?: 0L,
+        created_at          : createdMillis ?: null,
         agent_id            : record.agent ?: null,
         old_number          : record.old_number ?: null,
         code_rio            : record.code_rio ?: null,

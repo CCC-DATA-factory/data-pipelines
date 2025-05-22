@@ -3,9 +3,21 @@
   "name": "Saller",
   "namespace": "processed",
   "fields": [
-    { "name": "id", "type": "string" },
-    { "name": "name", "type": "string" },
-    { "name": "role", "type": "string" },
+    {
+      "name": "id",
+      "type": ["null", "string"],
+      "default": null
+    },
+    {
+      "name": "name",
+      "type": ["null", "string"],
+      "default": null
+    },
+    {
+      "name": "role",
+      "type": ["null", "string"],
+      "default": null
+    },
     {
       "name": "parent_id",
       "type": ["null", "string"],
@@ -18,10 +30,11 @@
     },
     {
       "name": "joined_at",
-      "type": {
+      "type": ["null", {
         "type": "long",
         "logicalType": "timestamp-millis"
-      }
+      }],
+      "default": null
     }
   ]
 }

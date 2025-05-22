@@ -6,9 +6,7 @@ import java.time.*
 import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.flowfile.FlowFile
 
-
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
-
 
 // Read content
 String inputJson = ''
@@ -38,44 +36,37 @@ long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().t
 List combinedRecords = []
 
 records.eachWithIndex { record, idx ->
-    def error = null
-    // Validation logic
-    if (!(record._id instanceof String)) {
-        error = "_id must be a string"
-    } else if (!(record.user instanceof String)) {
-        error = "user must be a string"
+    def errors = []
+
+    def id = (record._id instanceof String) ? record._id : null
+    def user = (record.user instanceof String) ? record.user : null
+    if (!id) errors << "_id missing or invalid"
+    if (!user) errors << "user missing or invalid"
+
+    def transformed = [
+        id                  : id,
+        id_user             : user,
+        role                : "sub-wholesaler",
+        parent_id           : record.wholesaler ?: null,
+        first_seen_date     : record.first_seen_date ?: null,
+        ingestion_date      : record.ingestion_date ?: null,
+        transformation_date : nowTunisMillis,
+        source_system       : record.source_system ?: null,
+        partition           : null,
+        is_valid            : errors.isEmpty(),
+        comment             : errors.isEmpty() ? null : errors.join('; ')
+    ]
+
+    if (!errors.isEmpty()) {
+        log.warn("Invalid record at index ${idx}: ${errors.join('; ')}")
     }
-    
-    // Base output record starts as original
-    def outRec = new LinkedHashMap<>(record)
-    if (error) {
-        outRec['is_valid'] = false
-        outRec['comment'] = error
-        log.warn("Invalid record at index ${idx}: ${error}")
-    } else {
-        // Transformation logic unchanged for valid
-        def transformed = [
-            id                  : record._id,
-            id_user             : record.user,
-            role                : "sub-wholesaler",
-            parent_id           : record.wholesaler ?: null,
-            first_seen_date     : record.first_seen_date ?: null,
-            ingestion_date      : record.ingestion_date ?: null,
-            transformation_date : nowTunisMillis,
-            source_system       : record.source_system ?: null,
-            partition           : null
-        ]
-        // Merge transformed fields
-        transformed.each { k, v -> outRec[k] = v }
-        outRec['is_valid'] = true
-        outRec['comment'] = null
-    }
-    combinedRecords << outRec
+
+    combinedRecords << transformed
 }
 
 // Create output FlowFile
 FlowFile outputFlowFile = session.create(flowFile)
-outputFlowFile = session.write(outputFlowFile, { _ , out ->
+outputFlowFile = session.write(outputFlowFile, { _, out ->
     out.write(JsonOutput.toJson(combinedRecords).getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
@@ -83,6 +74,7 @@ outputFlowFile = session.write(outputFlowFile, { _ , out ->
 inheritedAttributes.each { attr ->
     flowFile.getAttribute(attr)?.with { outputFlowFile = session.putAttribute(outputFlowFile, attr, it) }
 }
+
 // Set metadata attributes
 def jsonBytes = JsonOutput.toJson(combinedRecords).getBytes(StandardCharsets.UTF_8)
 outputFlowFile = session.putAttribute(outputFlowFile, 'file.size', String.valueOf(jsonBytes.length))

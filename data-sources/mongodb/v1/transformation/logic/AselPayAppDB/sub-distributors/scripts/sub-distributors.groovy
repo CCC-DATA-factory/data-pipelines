@@ -6,12 +6,10 @@ import java.time.*
 import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.flowfile.FlowFile
 
-
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
 
-
 // Read content as JSON string
-String inputJson = ''''''
+String inputJson = ''
 flowFile = session.write(flowFile, { inputStream, outputStream ->
     inputJson = IOUtils.toString(inputStream, StandardCharsets.UTF_8)
     outputStream.write(inputJson.getBytes(StandardCharsets.UTF_8))
@@ -45,34 +43,29 @@ List outputRecords = []
 
 records.eachWithIndex { record, idx ->
     def errors = []
-    // Validate required fields
-    if (!(record._id instanceof String)) {
-        errors << "_id must be a string"
-    } else if (!(record.user instanceof String)) {
-        errors << "user must be a string"
-    }
-    // Keep existing transform logic for valid records
-    def transformed = [:]
-    if (errors.isEmpty()) {
-        transformed = [
-            id                  : record._id,
-            id_user             : record.user,
-            role                : "sub-distributor",
-            parent_id           : record.subWholesaler ?: null,
-            first_seen_date     : record.first_seen_date ?: null,
-            ingestion_date      : record.ingestion_date ?: null,
-            transformation_date : nowTunisMillis,
-            source_system       : record.source_system ?: null,
-            partition           : null
-        ]
-    }
-    
-    // Build the output record: merge original + transformed fields
-    def outRec = new LinkedHashMap<>(record)
-    transformed.each { k, v -> outRec[k] = v }
-    outRec['is_valid'] = errors.isEmpty()
-    outRec['comment'] = errors.isEmpty() ? null : errors.join('; ')
-    outputRecords << outRec
+
+    // Validate required fields and check type string
+    def id = (record._id instanceof String) ? record._id : null
+    def user = (record.user instanceof String) ? record.user : null
+    if (!id) errors << "_id missing or invalid"
+    if (!user) errors << "user missing or invalid"
+
+    def transformed = [
+        id                  : id,
+        id_user             : user,
+        role                : "sub-distributor",
+        parent_id           : record.subWholesaler ?: null,
+        first_seen_date     : record.first_seen_date ?: null,
+        ingestion_date      : record.ingestion_date ?: null,
+        transformation_date : nowTunisMillis,
+        source_system       : record.source_system ?: null,
+        partition           : null,
+        is_valid            : errors.isEmpty(),
+        comment             : errors.isEmpty() ? null : errors.join('; ')
+    ]
+
+    outputRecords << transformed
+
     if (!errors.isEmpty()) {
         log.warn("Invalid record at index ${idx}: ${errors.join('; ')}")
     }
@@ -80,7 +73,7 @@ records.eachWithIndex { record, idx ->
 
 // Write combined records to single FlowFile
 FlowFile outputFlowFile = session.create(flowFile)
-outputFlowFile = session.write(outputFlowFile, {_ , out ->
+outputFlowFile = session.write(outputFlowFile, { _, out ->
     out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 

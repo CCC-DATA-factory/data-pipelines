@@ -3,18 +3,16 @@
   "name": "Activation",
   "namespace": "com.example",
   "fields": [
-    { "name": "id", "type": "string" },
-    { "name": "sim_id", "type": "string" },
-    { "name": "agent_id", "type": "string" },
-    { "name": "customer_id", "type": "string" },
-    { "name": "mvno_id", "type": "string" },
+    { "name": "id", "type": ["null", "string"], "default": null },
+    { "name": "sim_id", "type": ["null", "string"], "default": null },
+    { "name": "agent_id", "type": ["null", "string"], "default": null },
+    { "name": "customer_id", "type": ["null", "string"], "default": null },
+    { "name": "mvno_id", "type": ["null", "string"], "default": null },
     {
       "name": "createdAt",
-      "type": {
-        "type": "long",
-        "logicalType": "timestamp-millis"
-      }
+      "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }],
+      "default": null
     },
-    { "name": "shopName", "type": "string" }
+    { "name": "shopName", "type": ["null", "string"], "default": null }
   ]
 }

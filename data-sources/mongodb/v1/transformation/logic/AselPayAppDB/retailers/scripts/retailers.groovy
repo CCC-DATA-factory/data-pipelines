@@ -51,32 +51,24 @@ records.eachWithIndex { record, idx ->
         errors << "user must be a string"
     }
 
-    // Prepare transformed fields if valid
-    def transformed = [:]
-    if (errors.isEmpty()) {
-        def parentId = record.subWholesaler ?: record.subDistributor ?: record.wholesaler ?: null
-        transformed = [
-            id                  : record._id,
-            id_user             : record.user,
-            role                : "retailer",
-            parent_id           : parentId,
-            first_seen_date     : record.first_seen_date ?: null,
-            ingestion_date      : record.ingestion_date ?: null,
-            transformation_date : nowTunisMillis,
-            source_system       : record.source_system ?: null,
-            partition           : null
-        ]
-    } else {
-        // Log each validation error
-        errors.each { err -> log.warn("Invalid record at index ${idx}: ${err}") }
-    }
+    // Prepare transformed fields with defaults
+    def transformed = [
+        id                  : record._id ?: null,
+        id_user             : record.user ?: null,
+        role                : "retailer",
+        parent_id           : record.subWholesaler ?: record.subDistributor ?: record.wholesaler ?: null,
+        first_seen_date     : record.first_seen_date ?: null,
+        ingestion_date      : record.ingestion_date ?: null,
+        transformation_date : nowTunisMillis,
+        source_system       : record.source_system ?: null,
+        partition           : null
+    ]
 
-    // Merge original and transformed data, and add validation attributes
-    def outRec = new LinkedHashMap<>(record)
-    transformed.each { k, v -> outRec[k] = v }
-    outRec['is_valid'] = errors.isEmpty()
-    outRec['comment'] = errors.isEmpty() ? null : errors.join('; ')
-    outputRecords << outRec
+    // Add validation info
+    transformed['is_valid'] = errors.isEmpty()
+    transformed['comment'] = errors.isEmpty() ? null : errors.join('; ')
+
+    outputRecords << transformed
 }
 
 // Create output FlowFile with combined records

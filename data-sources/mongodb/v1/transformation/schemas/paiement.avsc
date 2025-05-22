@@ -3,17 +3,15 @@
   "name": "Paiement",
   "namespace": "processed",
   "fields": [
-    { "name": "id", "type": "string" },
-    { "name": "commercial_id", "type": "string" },
-    { "name": "franchise_id", "type": "string" },
-    { "name": "transaction_id", "type": "string" },
-    { "name": "amount", "type": "double" },
+    { "name": "id", "type": ["null", "string"], "default": null },
+    { "name": "commercial_id", "type": ["null", "string"], "default": null },
+    { "name": "franchise_id", "type": ["null", "string"], "default": null },
+    { "name": "transaction_id", "type": ["null", "string"], "default": null },
+    { "name": "amount", "type": ["null", "double"], "default": null },
     {
       "name": "created_at",
-      "type": {
-        "type": "long",
-        "logicalType": "timestamp-millis"
-      }
+      "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }],
+      "default": null
     }
   ]
 }

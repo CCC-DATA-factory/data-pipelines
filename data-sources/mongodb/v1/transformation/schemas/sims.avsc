@@ -3,19 +3,17 @@
   "name": "Sim",
   "namespace": "processed",
   "fields": [
-    { "name": "id", "type": "string" },
-    { "name": "ICCID", "type": "string" },
-    { "name": "SN", "type": "string" },
-    { "name": "MSISDN", "type": "string" },
-    { "name": "IMSI", "type": "string" },
-    { "name": "mvno_id", "type": "string" },
+    { "name": "id", "type": ["null", "string"], "default": null },
+    { "name": "ICCID", "type": ["null", "string"], "default": null },
+    { "name": "SN", "type": ["null", "string"], "default": null },
+    { "name": "MSISDN", "type": ["null", "string"], "default": null },
+    { "name": "IMSI", "type": ["null", "string"], "default": null },
+    { "name": "mvno_id", "type": ["null", "string"], "default": null },
     {
       "name": "activation_date",
-      "type": {
-        "type": "long",
-        "logicalType": "timestamp-millis"
-      }
+      "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }],
+      "default": null
     },
-    { "name": "customer_id", "type": "string" }
+    { "name": "customer_id", "type": ["null", "string"], "default": null }
   ]
 }

@@ -3,14 +3,17 @@
   "name": "ProcessedUser",
   "namespace": "processed",
   "fields": [
-    { "name": "id", "type": "string" },
-    { "name": "name", "type": "string" },
+    { "name": "id", "type": ["null", "string"], "default": null },
+    { "name": "name", "type": ["null", "string"], "default": null },
     {
       "name": "joined_at",
-      "type": {
-        "type": "long",
-        "logicalType": "timestamp-millis"
-      }
+      "type": ["null",
+        {
+          "type": "long",
+          "logicalType": "timestamp-millis"
+        }
+      ],
+      "default": null
     }
   ]
 }

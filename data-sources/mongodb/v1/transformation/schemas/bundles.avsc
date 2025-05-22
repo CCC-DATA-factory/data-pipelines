@@ -3,19 +3,17 @@
   "name": "bundles",
   "namespace": "processed",
   "fields": [
-    { "name": "id", "type": "string" },
-    { "name": "name", "type": "string" },
-    { "name": "bundleid", "type": "string" },
-    { "name": "data_amount_gb", "type": "double" },
-    { "name": "voice_amount_minutes", "type": "double" },
-    { "name": "sms_amount", "type": "int" },
-    { "name": "validity_days", "type": "int" },
+    { "name": "id", "type": ["null", "string"], "default": null },
+    { "name": "name", "type": ["null", "string"], "default": null },
+    { "name": "bundleid", "type": ["null", "string"], "default": null },
+    { "name": "data_amount_gb", "type": ["null", "double"], "default": null },
+    { "name": "voice_amount_minutes", "type": ["null", "double"], "default": null },
+    { "name": "sms_amount", "type": ["null", "int"], "default": null },
+    { "name": "validity_days", "type": ["null", "int"], "default": null },
     {
       "name": "createdat",
-      "type": {
-        "type": "long",
-        "logicalType": "timestamp-millis"
-      }
+      "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }],
+      "default": null
     }
   ]
 }

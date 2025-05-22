@@ -3,18 +3,19 @@
   "name": "TopupLights",
   "namespace": "processed",
   "fields": [
-    { "name": "id", "type": "string" },
-    { "name": "retailer_id", "type": "string" },
-    { "name": "sim_id", "type": "string" },
-    { "name": "shopName", "type": "string" },
-    { "name": "mvno_id", "type": "string" },
+    { "name": "id", "type": ["null", "string"], "default": null },
+    { "name": "retailer_id", "type": ["null", "string"], "default": null },
+    { "name": "sim_id", "type": ["null", "string"], "default": null },
+    { "name": "shopName", "type": ["null", "string"], "default": null },
+    { "name": "mvno_id", "type": ["null", "string"], "default": null },
     {
       "name": "createdAt",
-      "type": {
+      "type": ["null", {
         "type": "long",
         "logicalType": "timestamp-millis"
-      }
+      }],
+      "default": null
     },
-    { "name": "amount", "type": "double" }
+    { "name": "amount", "type": ["null", "double"], "default": null }
   ]
 }
