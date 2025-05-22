@@ -83,8 +83,8 @@ inheritedAttributes.each { attr ->
 // Add metadata
 newAttrs['file.size'] = String.valueOf(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8).length)
 newAttrs['records.count'] = String.valueOf(outputRecords.size())
-newAttrs['target_iceberg_table_name'] = flowFile.getAttribute('schema.name') ?: 'roles'
-newAttrs['schema.name'] = flowFile.getAttribute('schema.name') ?: 'roles'
+newAttrs['target_iceberg_table_name'] = 'roles'
+newAttrs['schema.name'] = 'roles'
 
 newAttrs.each { k, v -> outputFlowFile = session.putAttribute(outputFlowFile, k, v) }
 

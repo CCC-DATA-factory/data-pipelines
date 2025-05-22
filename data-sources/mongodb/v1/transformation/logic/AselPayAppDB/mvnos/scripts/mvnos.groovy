@@ -4,6 +4,9 @@ import org.apache.nifi.processor.io.StreamCallback
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
+// Attributes to inherit
+def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
+
 long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
 
 String inputJson = ''
@@ -57,4 +60,21 @@ def resultFlowFile = session.create(flowFile)
 resultFlowFile = session.write(resultFlowFile, { _ ,outStream ->
     outStream.write(JsonOutput.toJson(outputRecords).getBytes('UTF-8'))
 } as StreamCallback)
+
+// Inherit attributes
+def newAttrs = [:]
+inheritedAttributes.each { attr ->
+    flowFile.getAttribute(attr)?.with { newAttrs[attr] = it }
+}
+
+// Add metadata attributes
+newAttrs['file.size'] = String.valueOf(JsonOutput.toJson(outputRecords).getBytes('UTF-8').length)
+newAttrs['records.count'] = String.valueOf(outputRecords.size())
+newAttrs['target_iceberg_table_name'] = 'mvnos'
+newAttrs['schema.name'] = 'mvnos'
+
+newAttrs.each { k, v -> 
+    resultFlowFile = session.putAttribute(resultFlowFile, k, v)
+}
+
 session.transfer(resultFlowFile, REL_SUCCESS)
