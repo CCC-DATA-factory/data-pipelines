@@ -4,10 +4,10 @@
   "namespace": "processed",
   "fields": [
     { "name": "id", "type": ["null", "string"], "default": null },
-    { "name": "ICCID", "type": ["null", "string"], "default": null },
-    { "name": "SN", "type": ["null", "string"], "default": null },
-    { "name": "MSISDN", "type": ["null", "string"], "default": null },
-    { "name": "IMSI", "type": ["null", "string"], "default": null },
+    { "name": "iccid", "type": ["null", "string"], "default": null },
+    { "name": "sn", "type": ["null", "string"], "default": null },
+    { "name": "msisdn", "type": ["null", "string"], "default": null },
+    { "name": "imsi", "type": ["null", "string"], "default": null },
     { "name": "mvno_id", "type": ["null", "string"], "default": null },
     {
       "name": "activation_date",

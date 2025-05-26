@@ -82,10 +82,10 @@ records.each { record ->
     // Build output record (always)
     def outputRec = [
         id                  : id ?: null,
-        ICCID               : iccid ?: null,
-        SN                  : sn ?: null,
-        MSISDN              : msisdn ?: null,
-        IMSI                : imsi ?: null,
+        iccid               : iccid ?: null,
+        sn                  : sn ?: null,
+        msisdn              : msisdn ?: null,
+        imsi                : imsi ?: null,
         mvno_id             : mvno ?: null,
         activation_date     : activationMillis ?: null,
         customer_id         : null,

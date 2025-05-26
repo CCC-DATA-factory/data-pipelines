@@ -68,8 +68,8 @@ records.eachWithIndex { record, idx ->
 
     def transformed = [
         _id                 : record._id ?: null,
-        DOB                 : record.DOB ?: null,
-        POB                 : record.POB ?: null,
+        dob                 : record.DOB ?: null,
+        pob                 : record.POB ?: null,
         address             : record.address ?: null,
         arta_id             : record.arta_id ?: null,
         cin                 : record.cin ?: null,

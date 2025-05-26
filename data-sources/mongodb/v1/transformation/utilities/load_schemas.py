@@ -40,11 +40,6 @@ COMMON_METADATA_FIELDS = [
         "name": "comment",
         "type": ["null", "string"],
         "default": None
-    },
-    {
-        "name": "partition",
-        "type": ["null", {"type": "array", "items": ["string", "int", "double"]}],
-        "default": None
     }
 
 ]

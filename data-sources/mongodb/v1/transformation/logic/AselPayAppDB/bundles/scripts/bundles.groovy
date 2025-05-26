@@ -71,7 +71,7 @@ inputRecords.eachWithIndex { data, idx ->
         voice_amount_minutes: null,
         sms_amount          : data.content?.sms ?: null,
         validity_days       : data.validity?.number ?: null,
-        createdat           : createdMillis,
+        created_at           : createdMillis,
         first_seen_date     : data.first_seen_date ?: null,
         ingestion_date      : data.ingestion_date ?: null,
         transformation_date : nowMillis,

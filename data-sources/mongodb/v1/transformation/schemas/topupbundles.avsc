@@ -7,10 +7,10 @@
     { "name": "retailer_id", "type": ["null", "string"], "default": null },
     { "name": "sim_id", "type": ["null", "string"], "default": null },
     { "name": "bundle_id", "type": ["null", "string"], "default": null },
-    { "name": "shopName", "type": ["null", "string"], "default": null },
+    { "name": "shop_name", "type": ["null", "string"], "default": null },
     { "name": "mvno_id", "type": ["null", "string"], "default": null },
     {
-      "name": "createdAt",
+      "name": "created_at",
       "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }],
       "default": null
     }

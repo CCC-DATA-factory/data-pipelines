@@ -3,7 +3,7 @@
   "name": "ShopRecord",
   "namespace": "processed",
   "fields": [
-    { "name": "_id", "type": ["null", "string"], "default": null },
+    { "name": "id", "type": ["null", "string"], "default": null },
     { "name": "name", "type": ["null", "string"], "default": null },
     { "name": "owner", "type": ["null", "string"], "default": null },
     { "name": "reseller_id" , "type": ["null", "string"], "default": null },

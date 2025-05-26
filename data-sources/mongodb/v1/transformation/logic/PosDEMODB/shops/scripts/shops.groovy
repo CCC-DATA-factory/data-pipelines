@@ -57,7 +57,7 @@ records.eachWithIndex { rec, idx ->
     }
 
     def outRec = [
-        _id                 : rec._id ?: null,
+        id                  : rec._id ?: null,
         name                : rec.name ?: null,
         owner               : rec.owner ?: null,
         reseller_id         : rec.reseller_id ?: null,

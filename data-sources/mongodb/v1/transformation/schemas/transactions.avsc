@@ -6,9 +6,9 @@
     { "name": "id", "type": ["null", "string"], "default": null },
     { "name": "sender_id", "type": ["null", "string"], "default": null },
     { "name": "recipient_id", "type": ["null", "string"], "default": null },
-    { "name": "transactionAmount", "type": ["null", "double"], "default": null },
+    { "name": "transaction_amount", "type": ["null", "double"], "default": null },
     {
-      "name": "createdAt",
+      "name": "created_at",
       "type": ["null", {
         "type": "long",
         "logicalType": "timestamp-millis"

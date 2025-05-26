@@ -9,10 +9,10 @@
     { "name": "customer_id", "type": ["null", "string"], "default": null },
     { "name": "mvno_id", "type": ["null", "string"], "default": null },
     {
-      "name": "createdAt",
+      "name": "created_at",
       "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }],
       "default": null
     },
-    { "name": "shopName", "type": ["null", "string"], "default": null }
+    { "name": "shop_name", "type": ["null", "string"], "default": null }
   ]
 }
