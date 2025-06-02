@@ -60,7 +60,7 @@ records.eachWithIndex { record, idx ->
         first_seen_date     : record.first_seen_date ?: null,
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowTunisMillis,
-        source_system       : record.source_system ?: null
+        source_system       : record.source_system ?: null,
         is_valid            : errors.isEmpty(),
         comment             : errors.isEmpty() ? null : errors.join("; ")
     ]
