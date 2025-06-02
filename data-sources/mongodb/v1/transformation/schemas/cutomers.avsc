@@ -3,7 +3,7 @@
   "name": "Customers",
   "namespace": "processed",
   "fields": [
-    { "name": "_id", "type": "string" }, 
+    { "name": "id", "type": "string" }, 
 
     { "name": "dob", "type": ["null", { "type": "long", "logicalType": "timestamp-millis" }], "default": null },
     { "name": "pob", "type": ["null", "string"], "default": null },

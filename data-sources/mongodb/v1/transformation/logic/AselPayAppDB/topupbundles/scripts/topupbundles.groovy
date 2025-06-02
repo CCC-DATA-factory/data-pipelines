@@ -6,11 +6,7 @@ import java.time.*
 import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.flowfile.FlowFile
 
-
-
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
-
-
 
 // Read full JSON
 String inputJson = ''
@@ -39,27 +35,28 @@ try {
 
 // Current time in Tunis timezone
 long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
+def dbName = flowFile.getAttribute("database_name") ?: "unknown_database"
+def collName = flowFile.getAttribute("collection_name") ?: "unknown_collection"
 
 List outputRecords = []
+List invalidSummary = []
 
 records.eachWithIndex { record, idx ->
     def errors = []
 
     // Validate required fields
-    if (!(record._id instanceof String)) {
-        errors << "_id must be a string"
-    }
-    if (!(record.retailer instanceof String)) {
-        errors << "retailer must be a string"
-    }
-    if (!(record.bundle instanceof String)) {
-        errors << "bundle must be a string"
-    }
-    if (!(record.SIM instanceof String)) {
-        errors << "SIM must be a string"
-    }
+    def id = (record._id instanceof String) ? record._id : null
+    def retailer = (record.retailer instanceof String) ? record.retailer : null
+    def bundle = (record.bundle instanceof String) ? record.bundle : null
+    def sim = (record.SIM instanceof String) ? record.SIM : null
+    def shop = (record.shopName ?: "Unknown").toString()
 
-    // Parse or default createdAt
+    if (!id) errors << "_id must be a string"
+    if (!retailer) errors << "retailer must be a string"
+    if (!bundle) errors << "bundle must be a string"
+    if (!sim) errors << "SIM must be a string"
+
+    // Parse createdAt or fallback
     Long createdAtMillis = null
     if (record.createdAt instanceof Number) {
         createdAtMillis = (record.createdAt as Number).longValue()
@@ -69,52 +66,73 @@ records.eachWithIndex { record, idx ->
         createdAtMillis = nowTunisMillis
     }
 
-    // Derive date parts and normalize shopName
     def dt = Instant.ofEpochMilli(createdAtMillis).atZone(ZoneId.of("Africa/Tunis"))
-    int createdYear = dt.getYear()
-    int createdMonth = dt.getMonthValue()
-    int createdDay = dt.getDayOfMonth()
-    String shop = (record.shopName ?: "Unknown").toString()
+ 
 
-    // Build transformed fields
     def transformed = [
-        id                  : (record._id instanceof String) ? record._id : null,
-        retailer_id         : (record.retailer instanceof String) ? record.retailer : null,
-        sim_id              : (record.SIM instanceof String) ? record.SIM : null,
-        bundle_id           : (record.bundle instanceof String) ? record.bundle : null,
-        shop_name            : shop,
+        id                  : id,
+        retailer_id         : retailer,
+        sim_id              : sim,
+        bundle_id           : bundle,
+        shop_name           : shop,
         mvno_id             : record.MVNO ?: null,
-        created_at           : createdAtMillis,
+        created_at          : createdAtMillis,
         first_seen_date     : record.first_seen_date ?: null,
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowTunisMillis,
-        source_system       : record.source_system ?: null
-        partition           : [createdYear, createdMonth, createdDay, shop],
+        source_system       : record.source_system ?: null,
         is_valid            : errors.isEmpty(),
         comment             : errors.isEmpty() ? null : errors.join('; ')
     ]
 
     outputRecords << transformed
+
+    if (!errors.isEmpty()) {
+        log.warn("Invalid record at index ${idx}: ${errors.join('; ')}")
+        invalidSummary << [
+            database_name   : dbName,
+            collection_name : collName,
+            record_id       : id,
+            error_message   : errors.join('; ')
+        ]
+    }
 }
 
-// Write combined output to success
+// Write output FlowFile with all records
 FlowFile outputFlowFile = session.create(flowFile)
-outputFlowFile = session.write(outputFlowFile, { _ , out ->
+outputFlowFile = session.write(outputFlowFile, { _, out ->
     out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
-// Inherit and set attributes
-def newAttributes = [:]
-inheritedAttributes.each { attr ->
-    def val = flowFile.getAttribute(attr)
-    if (val) newAttributes[attr] = val
-}
+// Copy inherited attributes and set metadata
 def jsonBytes = JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8)
-newAttributes['file.size'] = String.valueOf(jsonBytes.length)
-newAttributes['records.count'] = String.valueOf(outputRecords.size())
-newAttributes['target_iceberg_table_name'] = "topupbundles"
-newAttributes['schema.name'] = "topupbundles"
-newAttributes.each { k, v -> outputFlowFile = session.putAttribute(outputFlowFile, k, v) }
+def newAttrs = [
+    'target_iceberg_table_name': "topupbundles",
+    'schema.name'              : "topupbundles"
+]
+inheritedAttributes.each { attr ->
+    flowFile.getAttribute(attr)?.with { newAttrs[attr] = it }
+}
+newAttrs.each { k, v -> outputFlowFile = session.putAttribute(outputFlowFile, k, v) }
 
 session.transfer(outputFlowFile, REL_SUCCESS)
-log.info("Transferred ${outputRecords.size()} records with validation flags (valid and invalid combined)")
+log.info("Transferred ${outputRecords.size()} topupbundle records with validation flags")
+
+// If validation issues exist, write to REL_FAILURE
+if (!invalidSummary.isEmpty()) {
+    FlowFile failureFlowFile = session.create(flowFile)
+    failureFlowFile = session.write(failureFlowFile, { _, out ->
+        out.write(JsonOutput.toJson(invalidSummary).getBytes(StandardCharsets.UTF_8))
+    } as StreamCallback)
+
+    failureFlowFile = session.putAttribute(failureFlowFile, "error.count", invalidSummary.size().toString())
+    failureFlowFile = session.putAttribute(failureFlowFile, "error.type", "validation_summary")
+    inheritedAttributes.each { attr ->
+        flowFile.getAttribute(attr)?.with {
+            failureFlowFile = session.putAttribute(failureFlowFile, attr, it)
+        }
+    }
+
+    session.transfer(failureFlowFile, REL_FAILURE)
+    log.warn("Validation errors found in ${invalidSummary.size()} topupbundle records")
+}

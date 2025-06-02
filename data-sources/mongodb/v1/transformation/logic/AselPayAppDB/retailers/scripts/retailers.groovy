@@ -5,12 +5,9 @@ import groovy.json.JsonOutput
 import java.time.*
 import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.flowfile.FlowFile
-import org.apache.nifi.processor.Relationship
-
 
 // Attributes to inherit
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
-
 
 // Read input JSON from FlowFile
 String inputJson = ''
@@ -38,20 +35,23 @@ try {
 // Current timestamp in Africa/Tunis timezone
 long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
 
-// Combine valid and invalid records into a single list with validation attributes
+// Combined records + error summary
 List outputRecords = []
+List invalidRecordsSummary = []
+
+def databaseName = flowFile.getAttribute('database_name') ?: 'unknown_database'
+def collectionName = flowFile.getAttribute('collection_name') ?: 'unknown_collection'
+
 records.eachWithIndex { record, idx ->
     def errors = []
-    // Validate _id
+
     if (!(record._id instanceof String)) {
         errors << "_id must be a string"
     }
-    // Validate user
     if (!(record.user instanceof String)) {
         errors << "user must be a string"
     }
 
-    // Prepare transformed fields with defaults
     def transformed = [
         id                  : record._id ?: null,
         id_user             : record.user ?: null,
@@ -60,36 +60,56 @@ records.eachWithIndex { record, idx ->
         first_seen_date     : record.first_seen_date ?: null,
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowTunisMillis,
-        source_system       : record.source_system ?: null,
-        partition           : null
+        source_system       : record.source_system ?: null
+        is_valid            : errors.isEmpty(),
+        comment             : errors.isEmpty() ? null : errors.join("; ")
     ]
 
-    // Add validation info
-    transformed['is_valid'] = errors.isEmpty()
-    transformed['comment'] = errors.isEmpty() ? null : errors.join('; ')
-
     outputRecords << transformed
+
+    if (!errors.isEmpty()) {
+        invalidRecordsSummary << [
+            database_name   : databaseName,
+            collection_name : collectionName,
+            record_id       : record._id?.toString() ?: null,
+            error_message   : errors.join("; ")
+        ]
+    }
 }
 
-// Create output FlowFile with combined records
+// Write valid + invalid records to REL_SUCCESS
 FlowFile outputFlowFile = session.create(flowFile)
-outputFlowFile = session.write(outputFlowFile, {_, out ->
+outputFlowFile = session.write(outputFlowFile, { _, out ->
     out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
-// Inherit selected attributes
 def newAttrs = [:]
 inheritedAttributes.each { attr ->
     flowFile.getAttribute(attr)?.with { newAttrs[attr] = it }
 }
-// Add metadata attributes
 def jsonBytes = JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8)
-newAttrs['file.size'] = String.valueOf(jsonBytes.length)
-newAttrs['records.count'] = String.valueOf(outputRecords.size())
-newAttrs['target_iceberg_table_name'] =  'roles'
+newAttrs['target_iceberg_table_name'] = 'roles'
 newAttrs['schema.name'] = 'roles'
 newAttrs.each { k, v -> outputFlowFile = session.putAttribute(outputFlowFile, k, v) }
 
-// Transfer the FlowFile to success relationship
 session.transfer(outputFlowFile, REL_SUCCESS)
 log.info("Transferred ${outputRecords.size()} records with validation flags (combined)")
+
+// If any validation errors exist, write to REL_FAILURE as well
+if (!invalidRecordsSummary.isEmpty()) {
+    FlowFile failureFlowFile = session.create(flowFile)
+    failureFlowFile = session.write(failureFlowFile, { _, out ->
+        out.write(JsonOutput.toJson(invalidRecordsSummary).getBytes(StandardCharsets.UTF_8))
+    } as StreamCallback)
+
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.count', invalidRecordsSummary.size().toString())
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.type', 'validation_summary')
+    inheritedAttributes.each { attr ->
+        flowFile.getAttribute(attr)?.with {
+            failureFlowFile = session.putAttribute(failureFlowFile, attr, it)
+        }
+    }
+
+    session.transfer(failureFlowFile, REL_FAILURE)
+    log.info("Transferred ${invalidRecordsSummary.size()} validation errors to REL_FAILURE")
+}

@@ -8,13 +8,14 @@ import org.apache.nifi.flowfile.FlowFile
 
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
 
-// Read content
+// Read input JSON content
 String inputJson = ''
 flowFile = session.write(flowFile, { inputStream, outputStream ->
     inputJson = IOUtils.toString(inputStream, StandardCharsets.UTF_8)
     outputStream.write(inputJson.getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
+// Parse JSON
 def parser = new JsonSlurper()
 def records
 try {
@@ -33,7 +34,11 @@ try {
 }
 
 long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
+def dbName = flowFile.getAttribute("database_name") ?: "unknown_database"
+def collName = flowFile.getAttribute("collection_name") ?: "unknown_collection"
+
 List combinedRecords = []
+List invalidSummary = []
 
 records.eachWithIndex { record, idx ->
     def errors = []
@@ -52,35 +57,57 @@ records.eachWithIndex { record, idx ->
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowTunisMillis,
         source_system       : record.source_system ?: null,
-        partition           : null,
         is_valid            : errors.isEmpty(),
         comment             : errors.isEmpty() ? null : errors.join('; ')
     ]
 
+    combinedRecords << transformed
+
     if (!errors.isEmpty()) {
         log.warn("Invalid record at index ${idx}: ${errors.join('; ')}")
+        invalidSummary << [
+            database_name   : dbName,
+            collection_name : collName,
+            record_id       : id,
+            error_message   : errors.join('; ')
+        ]
     }
-
-    combinedRecords << transformed
 }
 
-// Create output FlowFile
+// Write all records to REL_SUCCESS
 FlowFile outputFlowFile = session.create(flowFile)
 outputFlowFile = session.write(outputFlowFile, { _, out ->
     out.write(JsonOutput.toJson(combinedRecords).getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
-// Carry over attributes
+// Copy inherited attributes
 inheritedAttributes.each { attr ->
     flowFile.getAttribute(attr)?.with { outputFlowFile = session.putAttribute(outputFlowFile, attr, it) }
 }
 
-// Set metadata attributes
+// Add metadata
 def jsonBytes = JsonOutput.toJson(combinedRecords).getBytes(StandardCharsets.UTF_8)
-outputFlowFile = session.putAttribute(outputFlowFile, 'file.size', String.valueOf(jsonBytes.length))
-outputFlowFile = session.putAttribute(outputFlowFile, 'records.count', String.valueOf(combinedRecords.size()))
 outputFlowFile = session.putAttribute(outputFlowFile, 'target_iceberg_table_name', 'roles')
 outputFlowFile = session.putAttribute(outputFlowFile, 'schema.name', 'roles')
 
 session.transfer(outputFlowFile, REL_SUCCESS)
-log.info("Transferred ${combinedRecords.size()} records with validation flags")
+log.info("Transferred ${combinedRecords.size()} sub-wholesaler records with validation flags")
+
+// If any invalid records, send summary to REL_FAILURE
+if (!invalidSummary.isEmpty()) {
+    FlowFile failureFlowFile = session.create(flowFile)
+    failureFlowFile = session.write(failureFlowFile, { _, out ->
+        out.write(JsonOutput.toJson(invalidSummary).getBytes(StandardCharsets.UTF_8))
+    } as StreamCallback)
+
+    failureFlowFile = session.putAttribute(failureFlowFile, "error.count", invalidSummary.size().toString())
+    failureFlowFile = session.putAttribute(failureFlowFile, "error.type", "validation_summary")
+    inheritedAttributes.each { attr ->
+        flowFile.getAttribute(attr)?.with {
+            failureFlowFile = session.putAttribute(failureFlowFile, attr, it)
+        }
+    }
+
+    session.transfer(failureFlowFile, REL_FAILURE)
+    log.warn("Validation errors found in ${invalidSummary.size()} records, sent to REL_FAILURE")
+}

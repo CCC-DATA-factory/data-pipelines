@@ -6,7 +6,9 @@ import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.processor.io.OutputStreamCallback
 import java.time.*
 
-
+// Get database_name and collection_name from attributes, fallback to unknown
+def database_name = flowFile.getAttribute('database_name') ?: 'unknown_database'
+def collection_name = flowFile.getAttribute('collection_name') ?: 'unknown_collection'
 
 // Safely read input using 2-arg StreamCallback
 def inputJson = ''
@@ -36,6 +38,7 @@ ZoneId tunisZone = ZoneId.of("Africa/Tunis")
 long nowMillis = ZonedDateTime.now(tunisZone).toInstant().toEpochMilli()
 
 List outputRecords = []
+List failureRecords = []  // <-- list for errors to send to FAILURE
 
 records.eachWithIndex { record, idx ->
     def createdAtMillis = null
@@ -81,18 +84,27 @@ records.eachWithIndex { record, idx ->
         agent_id            : record.agent ?: null,
         customer_id         : record.customer ?: null,
         mvno_id             : record.mvno_id?.toString(),
-        created_at           : createdAtMillis,
-        shop_name            : shop,
+        created_at          : createdAtMillis,
+        shop_name           : shop,
         first_seen_date     : record.first_seen_date ?: null,
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowMillis,
         source_system       : record.source_system ?: null,
-        partition           : [createdYear, createdMonth, createdDay, shop],
         is_valid            : errorMessages.isEmpty(),
         comment             : errorMessages ? errorMessages.join("; ") : null
     ]
 
     outputRecords << transformed
+
+    // If errors, add to failureRecords list
+    if (!errorMessages.isEmpty()) {
+        failureRecords << [
+            database_name   : database_name,
+            collection_name : collection_name,
+            record_id       : record._id ?: null,
+            error_message   : errorMessages.join("; ")
+        ]
+    }
 }
 
 // Write output safely using OutputStreamCallback (1-arg)
@@ -110,4 +122,21 @@ if (!outputRecords.isEmpty()) {
     log.info("Transferred ${outputRecords.size()} activation records with validation metadata")
 }
 
+// Write failure records if any to separate FlowFile sent to REL_FAILURE
+if (!failureRecords.isEmpty()) {
+    def failureFlowFile = session.create(flowFile)
+    failureFlowFile = session.write(failureFlowFile, { out ->
+        out.write(JsonOutput.toJson(failureRecords).getBytes(StandardCharsets.UTF_8))
+    } as OutputStreamCallback)
 
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.count', "${failureRecords.size()}")
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.type', 'validation_summary')
+
+    // Inherit attributes for failure FlowFile
+    ['database_name', 'collection_name', 'filepath'].each { attr ->
+        flowFile.getAttribute(attr)?.with { failureFlowFile = session.putAttribute(failureFlowFile, attr, it) }
+    }
+
+    session.transfer(failureFlowFile, REL_FAILURE)
+    log.info("Transferred ${failureRecords.size()} validation errors to FAILURE")
+}

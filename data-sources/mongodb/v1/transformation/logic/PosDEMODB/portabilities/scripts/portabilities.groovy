@@ -6,13 +6,21 @@ import org.apache.nifi.processor.io.StreamCallback
 import java.time.*
 import org.apache.nifi.flowfile.FlowFile
 
+// Inherit these attributes to new flowfiles
+def inheritedAttributes = ['database_name', 'collection_name']
 
+// Get database_name and collection_name from flowFile attributes or default
+def database_name = flowFile.getAttribute('database_name') ?: 'unknown_database'
+def collection_name = flowFile.getAttribute('collection_name') ?: 'unknown_collection'
+
+// Read FlowFile content into a String
 def inputJson = ''
 flowFile = session.write(flowFile, { inputStream, outputStream ->
     inputJson = IOUtils.toString(inputStream, StandardCharsets.UTF_8)
     outputStream.write(inputJson.getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
+// Parse JSON input
 def jsonSlurper = new JsonSlurper()
 def records
 try {
@@ -32,6 +40,7 @@ ZoneId tunisZone = ZoneId.of("Africa/Tunis")
 long nowMillis = ZonedDateTime.now(tunisZone).toInstant().toEpochMilli()
 
 List outputRecords = []
+List failureRecords = []
 
 records.each { record ->
     def errorMessages = []
@@ -49,7 +58,7 @@ records.each { record ->
         errorMessages << "Missing or invalid createdAt/first_seen_date"
     }
 
-    // Required fields
+    // Required fields validations
     if (!record._id) errorMessages << "_id missing"
     if (!record.SIM) errorMessages << "SIM missing"
     if (!record.customer) errorMessages << "customer missing"
@@ -71,17 +80,26 @@ records.each { record ->
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowMillis,
         source_system       : record.source_system ?: null,
-        partition           : dt ? [ dt.getYear(), dt.getMonthValue(), dt.getDayOfMonth() ] : null,
         is_valid            : errorMessages.isEmpty(),
         comment             : errorMessages ? errorMessages.join("; ") : null
     ]
 
     outputRecords << outputRec
+
+    // Prepare failure record for invalid data only
+    if (!errorMessages.isEmpty()) {
+        failureRecords << [
+            database_name   : database_name,
+            collection_name : collection_name,
+            record_id       : record._id?.toString() ?: null,
+            error_message   : errorMessages.join("; ")
+        ]
+    }
 }
 
 // Write all records (valid and invalid) to success
 FlowFile successFlowFile = session.create(flowFile)
-successFlowFile = session.write(successFlowFile, { _ , out ->
+successFlowFile = session.write(successFlowFile, { _, out ->
     out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
 
@@ -91,3 +109,23 @@ successFlowFile = session.putAttribute(successFlowFile, "record.count", outputRe
 
 session.transfer(successFlowFile, REL_SUCCESS)
 log.info("Transferred ${outputRecords.size()} portability records with validation flags")
+
+// If failure records exist, create a separate flowfile and send to failure relationship
+if (!failureRecords.isEmpty()) {
+    FlowFile failureFlowFile = session.create(flowFile)
+    failureFlowFile = session.write(failureFlowFile, { _, out ->
+        out.write(JsonOutput.toJson(failureRecords).getBytes(StandardCharsets.UTF_8))
+    } as StreamCallback)
+
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.count', "${failureRecords.size()}")
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.type', 'validation_summary')
+
+    // Copy inherited attributes
+    inheritedAttributes.each { attr ->
+        def val = flowFile.getAttribute(attr)
+        if (val != null) failureFlowFile = session.putAttribute(failureFlowFile, attr, val)
+    }
+
+    session.transfer(failureFlowFile, REL_FAILURE)
+    log.info("Transferred ${failureRecords.size()} validation errors to FAILURE")
+}

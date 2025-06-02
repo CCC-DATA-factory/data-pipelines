@@ -7,10 +7,7 @@ import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.processor.io.OutputStreamCallback
 import org.apache.nifi.flowfile.FlowFile
 
-
 def inheritedAttrs = ['filepath', 'database_name', 'collection_name']
-
-
 
 // Read raw JSON safely
 String raw = ''
@@ -34,8 +31,14 @@ try {
     return
 }
 
-// Prepare unified output list
+// Get inherited attributes
+def database_name = flowFile.getAttribute('database_name') ?: 'unknown_database'
+def collection_name = flowFile.getAttribute('collection_name') ?: 'unknown_collection'
+
+// Prepare unified output list and failure error list
 List outputRecords = []
+List failureRecords = []
+
 long nowMillis = ZonedDateTime.now(ZoneId.of('Africa/Tunis')).toInstant().toEpochMilli()
 
 // Transform each record
@@ -43,6 +46,7 @@ records.eachWithIndex { rec, idx ->
     def errs = []
 
     if (!rec._id) errs << '_id is required'
+    if (!rec.name) errs << 'name is required'
     if (rec.first_seen_date == null) errs << 'first_seen_date is required'
 
     long createdAt = 0L
@@ -73,18 +77,23 @@ records.eachWithIndex { rec, idx ->
         transformation_date : nowMillis,
         source_system       : rec.source_system ?: null,
         is_valid            : errs.isEmpty(),
-        comment             : errs ? errs.join('; ') : null,
-        partition           : null
+        comment             : errs ? errs.join('; ') : null
     ]
 
     outputRecords << outRec
 
     if (!errs.isEmpty()) {
+        failureRecords << [
+            database_name   : database_name,
+            collection_name : collection_name,
+            record_id       : rec._id ?: null,
+            error_message   : errs.join('; ')
+        ]
         log.warn("Record ${idx} invalid: ${errs.join('; ')}")
     }
 }
 
-// Create new FlowFile with transformed data
+// Create new FlowFile with transformed data (both valid + invalid)
 FlowFile outFF = session.create(flowFile)
 outFF = session.write(outFF, { outputStream ->
     outputStream.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
@@ -96,13 +105,29 @@ inheritedAttrs.each { k ->
     def v = flowFile.getAttribute(k)
     if (v) attrs[k] = v
 }
-attrs['file.size']                 = String.valueOf(JsonOutput.toJson(outputRecords).bytes.length)
-attrs['records.count']            = String.valueOf(outputRecords.size())
+
 attrs['target_iceberg_table_name'] = 'shops'
 attrs['schema.name'] = "shops"
 
 attrs.each { k, v -> outFF = session.putAttribute(outFF, k, v) }
 
-// Transfer and cleanup
+// Transfer to SUCCESS
 session.transfer(outFF, REL_SUCCESS)
 
+// Generate validation error summary (if any) to REL_FAILURE
+if (!failureRecords.isEmpty()) {
+    FlowFile errorFF = session.create(flowFile)
+    errorFF = session.write(errorFF, { out ->
+        out.write(JsonOutput.toJson(failureRecords).getBytes(StandardCharsets.UTF_8))
+    } as OutputStreamCallback)
+
+    errorFF = session.putAttribute(errorFF, 'error.count', "${failureRecords.size()}")
+    errorFF = session.putAttribute(errorFF, 'error.type', 'validation_summary')
+
+    inheritedAttrs.each { attr ->
+        flowFile.getAttribute(attr)?.with { errorFF = session.putAttribute(errorFF, attr, it) }
+    }
+
+    session.transfer(errorFF, REL_FAILURE)
+    log.info("Transferred ${failureRecords.size()} validation error summaries to FAILURE")
+}

@@ -35,8 +35,9 @@ try {
 
 long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
 
-// Prepare combined output list
+// Prepare combined output list and invalid summary list
 List outputRecords = []
+List invalidSummary = []
 
 records.eachWithIndex { record, idx ->
     def errors = []
@@ -54,7 +55,6 @@ records.eachWithIndex { record, idx ->
         first_seen_date     : record.first_seen_date ?: null,
         ingestion_date      : record.ingestion_date ?: null,
         source_system       : record.source_system ?: null,
-        partition           : null,
         transformation_date : nowTunisMillis,
         is_valid            : errors.isEmpty(),
         comment             : errors.isEmpty() ? null : errors.join('; ')
@@ -62,6 +62,13 @@ records.eachWithIndex { record, idx ->
 
     if (!errors.isEmpty()) {
         log.warn("Invalid record at index ${idx}: ${errors.join('; ')}")
+        // Add to invalidSummary with error messages joined by '; '
+        invalidSummary << [
+            database_name   : flowFile.getAttribute("database_name") ?: "unknown_database",
+            collection_name : flowFile.getAttribute("collection_name") ?: "unknown_collection",
+            record_id       : id,
+            error_message   : errors.join('; ')
+        ]
     }
 
     outputRecords << transformed
@@ -79,12 +86,30 @@ inheritedAttributes.each { attr ->
 }
 
 // Set metadata attributes
-def jsonBytes = JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8)
-outputFlowFile = session.putAttribute(outputFlowFile, 'file.size', String.valueOf(jsonBytes.length))
-outputFlowFile = session.putAttribute(outputFlowFile, 'records.count', String.valueOf(outputRecords.size()))
 outputFlowFile = session.putAttribute(outputFlowFile, 'target_iceberg_table_name', 'roles')
 outputFlowFile = session.putAttribute(outputFlowFile, 'schema.name', 'roles')
 
-// Transfer and cleanup
+// Transfer the combined records to success
 session.transfer(outputFlowFile, REL_SUCCESS)
 log.info("Transferred ${outputRecords.size()} records (valid & invalid) to success")
+
+// If there are invalid records, create a failure FlowFile with the summary
+if (!invalidSummary.isEmpty()) {
+    FlowFile failureFF = session.create(flowFile)
+    failureFF = session.write(failureFF, { _, os ->
+        os.write(JsonOutput.toJson(invalidSummary).getBytes(StandardCharsets.UTF_8))
+    } as StreamCallback)
+
+    // Copy inherited attributes to failure FF
+    def failureAttrs = [:]
+    inheritedAttributes.each { k ->
+        flowFile.getAttribute(k)?.with { failureAttrs[k] = it }
+    }
+    def failureBytes = JsonOutput.toJson(invalidSummary).getBytes(StandardCharsets.UTF_8)
+    failureAttrs['error.type'] = "validation_summary"
+    failureAttrs['error.count'] = invalidSummary.size().toString()
+    failureAttrs.each { k, v -> failureFF = session.putAttribute(failureFF, k, v) }
+
+    session.transfer(failureFF, REL_FAILURE)
+    log.info("Transferred ${invalidSummary.size()} invalid records summary to REL_FAILURE")
+}

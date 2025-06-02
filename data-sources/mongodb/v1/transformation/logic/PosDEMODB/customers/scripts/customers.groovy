@@ -8,7 +8,9 @@ import java.time.*
 import org.apache.commons.codec.digest.MurmurHash3
 import org.apache.nifi.flowfile.FlowFile
 
-
+// Get database_name and collection_name attributes for failure records
+def database_name = flowFile.getAttribute('database_name') ?: 'unknown_database'
+def collection_name = flowFile.getAttribute('collection_name') ?: 'unknown_collection'
 
 def inputJson = ''
 flowFile = session.write(flowFile, { inputStream, outputStream ->
@@ -37,14 +39,23 @@ ZoneId tunisZone = ZoneId.of("Africa/Tunis")
 long nowMillis = ZonedDateTime.now(tunisZone).toInstant().toEpochMilli()
 
 List finalRecords = []
+List failureRecords = []
 
 records.eachWithIndex { record, idx ->
     def error = null
 
     // Validation
-    if (!record._id || !record.cin || record.mvno_id == null) {
-        error = "Missing required fields (_id, cin, mvno_id)"
+    if (!record._id || !record.cin ) {
+        error = "Missing required fields (_id, cin)"
         log.warn("Invalid record at index ${idx}: ${error}")
+
+        // Add to failure list with requested fields
+        failureRecords << [
+            database_name   : database_name,
+            collection_name : collection_name,
+            record_id       : record._id ?: null,
+            error_message   : error
+        ]
     }
 
     // Compute creationMillis
@@ -58,16 +69,10 @@ records.eachWithIndex { record, idx ->
         creationMillis = record.first_seen_date as Long
     }
 
-    // Compute bucket = hash(_id) mod 12
-    int bucket = 0
-    if (record._id) {
-        byte[] idBytes = (record._id as String).getBytes(StandardCharsets.UTF_8)
-        int rawHash = MurmurHash3.hash32(idBytes, 0, idBytes.length, 0)
-        bucket = Math.abs(rawHash) % 12
-    }
+
 
     def transformed = [
-        _id                 : record._id ?: null,
+        id                 : record._id ?: null,
         dob                 : record.DOB ?: null,
         pob                 : record.POB ?: null,
         address             : record.address ?: null,
@@ -92,7 +97,6 @@ records.eachWithIndex { record, idx ->
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowMillis,
         source_system       : record.source_system ?: null,
-        partition           : [ bucket ],
         is_valid            : (error == null),
         comment             : error
     ]
@@ -108,9 +112,23 @@ if (!finalRecords.isEmpty()) {
 
     outputFlowFile = session.putAttribute(outputFlowFile, "target_iceberg_table_name", "cutomers")
     outputFlowFile = session.putAttribute(outputFlowFile, "schema.name", "cutomers")
-    outputFlowFile = session.putAttribute(outputFlowFile, "record.count", finalRecords.size().toString())
 
     session.transfer(outputFlowFile, REL_SUCCESS)
     log.info("Transferred ${finalRecords.size()} total records (valid + invalid) to success with flags")
 }
 
+// Transfer failure records if any
+if (!failureRecords.isEmpty()) {
+    def failureFlowFile = session.create(flowFile)
+    failureFlowFile = session.write(failureFlowFile, { out ->
+        out.write(JsonOutput.toJson(failureRecords).getBytes(StandardCharsets.UTF_8))
+    } as OutputStreamCallback)
+
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.count', "${failureRecords.size()}")
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.type', 'validation_summary')
+    failureFlowFile = session.putAttribute(failureFlowFile, "database_name", database_name)
+    failureFlowFile = session.putAttribute(failureFlowFile, "collection_name", collection_name)
+
+    session.transfer(failureFlowFile, REL_FAILURE)
+    log.info("Transferred ${failureRecords.size()} validation errors to FAILURE")
+}

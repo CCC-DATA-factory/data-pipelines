@@ -7,7 +7,12 @@ import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.processor.io.OutputStreamCallback
 import org.apache.nifi.flowfile.FlowFile
 
+// Attributes to inherit for failure FlowFile
+def inheritedAttributes = ['database_name', 'collection_name']
 
+// Get database_name and collection_name from flowFile attributes
+def database_name = flowFile.getAttribute('database_name') ?: 'unknown_database'
+def collection_name = flowFile.getAttribute('collection_name') ?: 'unknown_collection'
 
 // Read input JSON safely using 2-arg closure
 def inputJson = ''
@@ -35,6 +40,7 @@ try {
 
 long nowMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
 List mergedRecords = []
+List failureRecords = []
 
 records.eachWithIndex { record, idx ->
     def error = null
@@ -50,6 +56,13 @@ records.eachWithIndex { record, idx ->
 
     if (!isValid) {
         log.warn("Invalid WholesalerRecord at index ${idx}: ${error}")
+        // Add to failure records list
+        failureRecords << [
+            database_name   : database_name,
+            collection_name : collection_name,
+            record_id       : record._id ?: null,
+            error_message   : error
+        ]
     }
 
     def transformed = [
@@ -62,13 +75,12 @@ records.eachWithIndex { record, idx ->
         transformation_date : nowMillis,
         source_system       : record.source_system ?: null,
         is_valid            : isValid,
-        comment             : isValid ? null : error,
-        partition           : null
+        comment             : isValid ? null : error
     ]
     mergedRecords << transformed
 }
 
-// Write result safely using OutputStreamCallback (1-arg)
+// Write success FlowFile with all records (valid + invalid)
 if (!mergedRecords.isEmpty()) {
     def successFlowFile = session.create(flowFile)
     successFlowFile = session.write(successFlowFile, { out ->
@@ -83,3 +95,21 @@ if (!mergedRecords.isEmpty()) {
     log.info("Transferred ${mergedRecords.size()} records (valid + invalid) to success")
 }
 
+// Write failure FlowFile with error summary if any failures occurred
+if (!failureRecords.isEmpty()) {
+    def failureFlowFile = session.create(flowFile)
+    failureFlowFile = session.write(failureFlowFile, { out ->
+        out.write(JsonOutput.toJson(failureRecords).getBytes(StandardCharsets.UTF_8))
+    } as OutputStreamCallback)
+
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.count', failureRecords.size().toString())
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.type', 'validation_summary')
+
+    // Inherit database and collection attributes
+    inheritedAttributes.each { attr ->
+        flowFile.getAttribute(attr)?.with { failureFlowFile = session.putAttribute(failureFlowFile, attr, it) }
+    }
+
+    session.transfer(failureFlowFile, REL_FAILURE)
+    log.info("Transferred ${failureRecords.size()} validation errors to failure")
+}

@@ -6,6 +6,7 @@ import org.apache.nifi.processor.io.StreamCallback
 import java.time.*
 import org.apache.nifi.flowfile.FlowFile
 
+def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
 
 def inputJson = ''
 flowFile = session.write(flowFile, { inputStream, outputStream ->
@@ -32,6 +33,10 @@ ZoneId tunisZone = ZoneId.of("Africa/Tunis")
 long nowMillis = ZonedDateTime.now(tunisZone).toInstant().toEpochMilli()
 
 List outputRecords = []
+List invalidRecordsSummary = []
+
+def databaseName = flowFile.getAttribute('database_name') ?: 'unknown_database'
+def collectionName = flowFile.getAttribute('collection_name') ?: 'unknown_collection'
 
 records.each { record ->
     def errorMessages = []
@@ -48,7 +53,6 @@ records.each { record ->
         errorMessages << "Missing or invalid createdAt/first_seen_date"
     }
 
-    // Always initialize all fields, even if validation fails
     def outputRec = [
         id                  : record._id ?: null,
         commercial_id       : record.commercial ?: null,
@@ -59,29 +63,30 @@ records.each { record ->
         first_seen_date     : record.first_seen_date ?: null,
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowMillis,
-        source_system       : record.source_system ?: null,
-        partition           : createdMillis != null ? [
-                                Instant.ofEpochMilli(createdMillis).atZone(tunisZone).getYear(),
-                                Instant.ofEpochMilli(createdMillis).atZone(tunisZone).getMonthValue(),
-                                Instant.ofEpochMilli(createdMillis).atZone(tunisZone).getDayOfMonth()
-                              ] : null
+        source_system       : record.source_system ?: null
     ]
 
-    // Validation rules
-    if (!record._id) errorMessages << "_id missing"
+    if (!record._id)        errorMessages << "_id missing"
     if (!record.commercial) errorMessages << "commercial missing"
-    if (!record.franchise) errorMessages << "franchise missing"
+    if (!record.franchise)  errorMessages << "franchise missing"
     if (!record.transaction) errorMessages << "transaction missing"
     if (record.amount == null) errorMessages << "amount missing"
 
-    // Add validation flags
     outputRec['is_valid'] = errorMessages.isEmpty()
     outputRec['comment'] = errorMessages.isEmpty() ? null : errorMessages.join("; ")
-
     outputRecords << outputRec
+
+    if (!errorMessages.isEmpty()) {
+        invalidRecordsSummary << [
+            database_name   : databaseName,
+            collection_name : collectionName,
+            record_id       : record._id?.toString() ?: null,
+            error_message   : errorMessages.join("; ")
+        ]
+    }
 }
 
-// Write all records (valid and invalid) to success
+// Write all records (valid + invalid) to success
 FlowFile successFlowFile = session.create(flowFile)
 successFlowFile = session.write(successFlowFile, { _ , out ->
     out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
@@ -91,5 +96,22 @@ successFlowFile = session.putAttribute(successFlowFile, "target_iceberg_table_na
 successFlowFile = session.putAttribute(successFlowFile, "schema.name", "paiement")
 successFlowFile = session.putAttribute(successFlowFile, "record.count", outputRecords.size().toString())
 
+inheritedAttributes.each { attr ->
+    flowFile.getAttribute(attr)?.with { successFlowFile = session.putAttribute(successFlowFile, attr, it) }
+}
+
 session.transfer(successFlowFile, REL_SUCCESS)
 log.info("Transferred ${outputRecords.size()} records with validation flags")
+
+// If validation errors exist, transfer to REL_FAILURE
+if (!invalidRecordsSummary.isEmpty()) {
+    FlowFile failureFlowFile = session.create(flowFile)
+    failureFlowFile = session.write(failureFlowFile, { _, out ->
+        out.write(JsonOutput.toJson(invalidRecordsSummary).getBytes(StandardCharsets.UTF_8))
+    } as StreamCallback)
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.count', invalidRecordsSummary.size().toString() )
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.type', 'validation_summary')
+    inheritedAttributes.each { k -> flowFile.getAttribute(k)?.with { failureFlowFile = session.putAttribute(failureFlowFile, k, it) } }
+    session.transfer(failureFlowFile, REL_FAILURE)
+    log.info("Transferred ${invalidRecordsSummary.size()} validation errors to REL_FAILURE")
+}

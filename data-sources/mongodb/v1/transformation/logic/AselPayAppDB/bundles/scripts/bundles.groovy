@@ -29,8 +29,14 @@ try {
     return
 }
 
+// Load metadata attributes
+def databaseName = flowFile.getAttribute('database_name') ?: 'unknown_database'
+def collectionName = flowFile.getAttribute('collection_name') ?: 'unknown_collection'
+
 List allBundles = []
 List allPriceHistories = []
+List invalidRecordsSummary = []
+
 long nowMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
 
 def parseLongSafe = { obj ->
@@ -71,15 +77,23 @@ inputRecords.eachWithIndex { data, idx ->
         voice_amount_minutes: null,
         sms_amount          : data.content?.sms ?: null,
         validity_days       : data.validity?.number ?: null,
-        created_at           : createdMillis,
+        created_at          : createdMillis,
         first_seen_date     : data.first_seen_date ?: null,
         ingestion_date      : data.ingestion_date ?: null,
         transformation_date : nowMillis,
         source_system       : data.source_system ?: null,
-        partition           : null,
         is_valid            : errors.isEmpty(),
         comment             : errors.isEmpty() ? null : errors.join('; ')
     ]
+
+    if (!errors.isEmpty()) {
+        invalidRecordsSummary << [
+            database_name   : databaseName,
+            collection_name : collectionName,
+            record_id       : data._id ?: null,
+            error_message   : errors.join('; ')
+        ]
+    }
 
     if (errors.isEmpty()) {
         try {
@@ -91,7 +105,7 @@ inputRecords.eachWithIndex { data, idx ->
             def voiceUnit = data.content?.voice?.unit ?: 'Minutes'
             bundleObj.voice_amount_minutes = (voiceUnit == 'Hours') ? voiceAmt*60 : voiceAmt
         } catch(Exception e) {
-            errors << "Transformation error: ${e.message}"
+            bundleObj.comment += "; transformation error: ${e.message}"
         }
     }
 
@@ -146,6 +160,7 @@ inputRecords.eachWithIndex { data, idx ->
     }
 }
 
+// Transfer main bundles and prices
 def branch = { List data, Relationship rel, String tableName ->
     if (!data) return
     FlowFile out = session.create(flowFile)
@@ -154,8 +169,6 @@ def branch = { List data, Relationship rel, String tableName ->
     } as StreamCallback)
     def attrs = [:]
     inheritedAttributes.each { k -> flowFile.getAttribute(k)?.with { attrs[k] = it } }
-    attrs['file.size'] = String.valueOf(JsonOutput.toJson(data).bytes.length)
-    attrs['records.count'] = String.valueOf(data.size())
     attrs['target_iceberg_table_name'] = tableName
     attrs['schema.name'] = tableName
     attrs.each { k,v -> out = session.putAttribute(out, k, v) }
@@ -164,3 +177,16 @@ def branch = { List data, Relationship rel, String tableName ->
 
 branch(allBundles,        REL_SUCCESS, 'bundles')
 branch(allPriceHistories, REL_SUCCESS, 'bundle_price_history')
+
+// Transfer failure summary if needed
+if (!invalidRecordsSummary.isEmpty()) {
+    FlowFile failureFlowFile = session.create(flowFile)
+    failureFlowFile = session.write(failureFlowFile, { _, out ->
+        out.write(JsonOutput.toJson(invalidRecordsSummary).getBytes(StandardCharsets.UTF_8))
+    } as StreamCallback)
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.count', invalidRecordsSummary.size().toString() )
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.type', 'validation_summary')
+    inheritedAttributes.each { k -> flowFile.getAttribute(k)?.with { failureFlowFile = session.putAttribute(failureFlowFile, k, it) } }
+    session.transfer(failureFlowFile, REL_FAILURE)
+    log.info("Transferred ${invalidRecordsSummary.size()} validation errors to REL_FAILURE")
+}

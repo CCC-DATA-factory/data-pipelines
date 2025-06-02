@@ -5,10 +5,13 @@ import groovy.json.JsonOutput
 import java.time.*
 import org.apache.nifi.processor.io.StreamCallback
 import org.apache.nifi.flowfile.FlowFile
-import org.apache.nifi.processor.Relationship
 
 // Attributes to inherit
 def inheritedAttributes = ['filepath', 'database_name', 'collection_name']
+
+// Get database_name and collection_name from flowFile attributes
+def database_name = flowFile.getAttribute('database_name') ?: 'unknown_database'
+def collection_name = flowFile.getAttribute('collection_name') ?: 'unknown_collection'
 
 // Read FlowFile content into JSON string
 String inputJson = ''
@@ -36,14 +39,15 @@ try {
 // Current timestamp in Tunis timezone
 long nowTunisMillis = ZonedDateTime.now(ZoneId.of("Africa/Tunis")).toInstant().toEpochMilli()
 
-// Prepare output list
+// Prepare output and failure lists
 List outputRecords = []
+List failureRecords = []
 
 // Iterate and validate/transform records
 records.eachWithIndex { record, idx ->
     def errors = []
 
-    // Initialize all fields with nulls or default values
+    // Transform
     def transformed = [
         id                  : record._id ?: null,
         id_user             : record.user ?: null,
@@ -52,11 +56,10 @@ records.eachWithIndex { record, idx ->
         first_seen_date     : record.first_seen_date ?: null,
         ingestion_date      : record.ingestion_date ?: null,
         transformation_date : nowTunisMillis,
-        source_system       : record.source_system ?: null,
-        partition           : null
+        source_system       : record.source_system ?: null
     ]
 
-    // Field validations (only add errors, don't block partial data)
+    // Validate
     if (!(record._id instanceof String)) errors << "_id must be a string"
     if (!(record.user instanceof String)) errors << "user must be a string"
 
@@ -65,11 +68,20 @@ records.eachWithIndex { record, idx ->
     outRec['comment'] = errors.isEmpty() ? null : errors.join('; ')
 
     outputRecords << outRec
+
+    // Prepare failure record if needed
+    if (!errors.isEmpty()) {
+        failureRecords << [
+            database_name   : database_name,
+            collection_name : collection_name,
+            record_id       : record._id ?: null,
+            error_message   : errors.join('; ')
+        ]
+    }
 }
 
-// Create new FlowFile for output
+// Write output records to new FlowFile
 FlowFile outputFlowFile = session.create(flowFile)
-// Write combined JSON
 outputFlowFile = session.write(outputFlowFile, {_, out ->
     out.write(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8))
 } as StreamCallback)
@@ -79,14 +91,27 @@ def newAttrs = [:]
 inheritedAttributes.each { attr ->
     flowFile.getAttribute(attr)?.with { newAttrs[attr] = it }
 }
-
-// Add metadata
-newAttrs['file.size'] = String.valueOf(JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8).length)
-newAttrs['records.count'] = String.valueOf(outputRecords.size())
 newAttrs['target_iceberg_table_name'] = 'roles'
 newAttrs['schema.name'] = 'roles'
 
 newAttrs.each { k, v -> outputFlowFile = session.putAttribute(outputFlowFile, k, v) }
-
 session.transfer(outputFlowFile, REL_SUCCESS)
-log.info("Transferred ${outputRecords.size()} records with validation flags (valid and invalid combined)")
+log.info("Transferred ${outputRecords.size()} records to SUCCESS")
+
+// If failure records exist, send a separate flowfile to REL_FAILURE
+if (!failureRecords.isEmpty()) {
+    FlowFile failureFlowFile = session.create(flowFile)
+    failureFlowFile = session.write(failureFlowFile, {_, out ->
+        out.write(JsonOutput.toJson(failureRecords).getBytes(StandardCharsets.UTF_8))
+    } as StreamCallback)
+
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.count', failureRecords.size().toString() )
+    failureFlowFile = session.putAttribute(failureFlowFile, 'error.type', 'validation_summary')
+
+    inheritedAttributes.each { attr ->
+        flowFile.getAttribute(attr)?.with { failureFlowFile = session.putAttribute(failureFlowFile, attr, it) }
+    }
+
+    session.transfer(failureFlowFile, REL_FAILURE)
+    log.info("Transferred ${failureRecords.size()} validation errors to FAILURE")
+}
