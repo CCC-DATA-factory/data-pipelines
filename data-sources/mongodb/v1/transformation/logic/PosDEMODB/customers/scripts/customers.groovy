@@ -110,8 +110,8 @@ if (!finalRecords.isEmpty()) {
         out.write(JsonOutput.toJson(finalRecords).getBytes(StandardCharsets.UTF_8))
     } as OutputStreamCallback)
 
-    outputFlowFile = session.putAttribute(outputFlowFile, "target_iceberg_table_name", "cutomers")
-    outputFlowFile = session.putAttribute(outputFlowFile, "schema.name", "cutomers")
+    outputFlowFile = session.putAttribute(outputFlowFile, "target_iceberg_table_name", "customers")
+    outputFlowFile = session.putAttribute(outputFlowFile, "schema.name", "customers")
 
     session.transfer(outputFlowFile, REL_SUCCESS)
     log.info("Transferred ${finalRecords.size()} total records (valid + invalid) to success with flags")
