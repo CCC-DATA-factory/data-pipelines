@@ -4,6 +4,7 @@ import os
 import sys
 import json
 
+
 # ——— CONFIGURATION ———
 REGISTRY_URL = "http://102.207.250.54:5544/apis/registry/v2"
 PROCESSED_GROUP_ID = "asel-schemas.processed-schemas"

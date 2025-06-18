@@ -103,8 +103,8 @@ inheritedAttrs.each { k ->
     if (v != null) attrs[k] = v
 }
 def jsonBytes = JsonOutput.toJson(outputRecords).getBytes(StandardCharsets.UTF_8)
-attrs['target_iceberg_table_name'] = "sallers"
-attrs['schema.name'] = "sallers"
+attrs['target_iceberg_table_name'] = "sellers"
+attrs['schema.name'] = "sellers"
 attrs.each { k,v -> outFF = session.putAttribute(outFF, k, v) }
 
 session.transfer(outFF, REL_SUCCESS)

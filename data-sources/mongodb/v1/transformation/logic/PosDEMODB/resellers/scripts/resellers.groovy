@@ -97,8 +97,8 @@ outFF = session.write(outFF, { outputStream ->
 def attrs = [:]
 inheritedAttrs.each { k -> flowFile.getAttribute(k)?.with { attrs[k] = it } }
 
-attrs['target_iceberg_table_name'] = "sallers"
-attrs['schema.name'] = "sallers"
+attrs['target_iceberg_table_name'] = "sellers"
+attrs['schema.name'] = "sellers"
 attrs.each { k, v -> outFF = session.putAttribute(outFF, k, v) }
 
 session.transfer(outFF, REL_SUCCESS)
