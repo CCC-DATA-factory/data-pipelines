@@ -42,7 +42,6 @@ COMMON_METADATA_FIELDS = [
         "type": ["null", "string"],
         "default": None
     }
-
 ]
 
 

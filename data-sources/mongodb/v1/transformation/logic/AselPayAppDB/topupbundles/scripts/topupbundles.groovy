@@ -54,7 +54,9 @@ records.eachWithIndex { record, idx ->
     if (!id) errors << "_id must be a string"
     if (!retailer) errors << "retailer must be a string"
     if (!bundle) errors << "bundle must be a string"
-    if (!sim) errors << "SIM must be a string"
+    if (!sim && (!record.SN || !record.MSISDN)) {
+        errors << "SIM must be a string or (SN and MSISDN) must be present"
+    }
 
     // Parse createdAt or fallback
     Long createdAtMillis = null
@@ -73,6 +75,8 @@ records.eachWithIndex { record, idx ->
         id                  : id,
         retailer_id         : retailer,
         sim_id              : sim,
+        msisdn              : record.MSISDN ?: null,
+        sn                  : record.SN ?: null,
         bundle_id           : bundle,
         shop_name           : shop,
         mvno_id             : record.MVNO ?: null,
