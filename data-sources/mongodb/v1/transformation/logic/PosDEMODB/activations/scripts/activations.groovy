@@ -40,6 +40,31 @@ long nowMillis = ZonedDateTime.now(tunisZone).toInstant().toEpochMilli()
 List outputRecords = []
 List failureRecords = []  // <-- list for errors to send to FAILURE
 
+def parseLongSafe = { obj ->
+    try {
+        return obj?.toString()?.toLong()
+    } catch (_) {
+        return null
+    }
+}
+long utcToTunisLocalEpochMillis(long utcEpochMillis) {
+    ZoneId tunisZone = ZoneId.of("Africa/Tunis")
+
+    // Convert UTC millis to Instant
+    Instant instant = Instant.ofEpochMilli(utcEpochMillis)
+
+    // Get the ZonedDateTime in Tunisia timezone for that instant
+    ZonedDateTime tunisZoned = instant.atZone(tunisZone)
+
+    // Get local date/time components
+    LocalDateTime tunisLocalDateTime = tunisZoned.toLocalDateTime()
+
+    // Now interpret that local date/time as if it were UTC, get the epoch millis
+    long shiftedMillis = tunisLocalDateTime.atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+    return shiftedMillis
+}
+
 records.eachWithIndex { record, idx ->
     def createdAtMillis = null
     def errorMessages = []
@@ -50,16 +75,15 @@ records.eachWithIndex { record, idx ->
     }
 
     // Rule 2: Validate creation_date
-    if (record.creation_date != null && record.creation_date.toString().isLong()) {
-        def utcMillis = record.creation_date as Long
-        createdAtMillis = ZonedDateTime.ofInstant(Instant.ofEpochMilli(utcMillis), ZoneOffset.UTC)
-            .withZoneSameInstant(tunisZone)
-            .toInstant().toEpochMilli()
+    if (record.creation_date != null && parseLongSafe(record.creation_date) != null) {
+        def utcMillis = parseLongSafe(record.creation_date)
+        createdAtMillis = utcToTunisLocalEpochMillis(utcMillis)
     } else if (record.first_seen_date != null) {
-        createdAtMillis = record.first_seen_date as Long
+        createdAtMillis = parseLongSafe(record.first_seen_date)
     } else {
         errorMessages << "Missing creation_date or first_seen_date"
     }
+
 
     // Rule 3: Required fields
     if (!record._id) errorMessages << "_id is required"
@@ -68,13 +92,7 @@ records.eachWithIndex { record, idx ->
     if (!record.customer) errorMessages << "customer is required"
     if (createdAtMillis == null) errorMessages << "Invalid createdAtMillis"
 
-    def createdYear = null, createdMonth = null, createdDay = null
-    if (createdAtMillis != null) {
-        def dt = Instant.ofEpochMilli(createdAtMillis).atZone(tunisZone)
-        createdYear = dt.getYear()
-        createdMonth = dt.getMonthValue()
-        createdDay = dt.getDayOfMonth()
-    }
+
 
     def shop = (record.shopName ?: "Unknown").toString()
 

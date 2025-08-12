@@ -38,19 +38,48 @@ List invalidRecordsSummary = []
 def databaseName = flowFile.getAttribute('database_name') ?: 'unknown_database'
 def collectionName = flowFile.getAttribute('collection_name') ?: 'unknown_collection'
 
+def parseLongSafe = { obj ->
+    try {
+        return obj?.toString()?.toLong()
+    } catch (_) {
+        return null
+    }
+}
+
+long utcToTunisLocalEpochMillis(long utcEpochMillis) {
+    ZoneId tunisZone = ZoneId.of("Africa/Tunis")
+
+    // Convert UTC millis to Instant
+    Instant instant = Instant.ofEpochMilli(utcEpochMillis)
+
+    // Get the ZonedDateTime in Tunisia timezone for that instant
+    ZonedDateTime tunisZoned = instant.atZone(tunisZone)
+
+    // Get local date/time components
+    LocalDateTime tunisLocalDateTime = tunisZoned.toLocalDateTime()
+
+    // Now interpret that local date/time as if it were UTC, get the epoch millis
+    long shiftedMillis = tunisLocalDateTime.atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+    return shiftedMillis
+}
+
+
 records.each { record ->
     def errorMessages = []
     def createdMillis = null
 
-    if (record.createdAt instanceof Number) {
-        def utcMillis = record.createdAt as Long
-        createdMillis = ZonedDateTime.ofInstant(Instant.ofEpochMilli(utcMillis), ZoneOffset.UTC)
-                            .withZoneSameInstant(tunisZone)
-                            .toInstant().toEpochMilli()
-    } else if (record.first_seen_date instanceof Number) {
-        createdMillis = record.first_seen_date as Long
+
+    def createdAtLong = parseLongSafe(record.createdAt)
+    if (createdAtLong != null) {
+        createdMillis = utcToTunisLocalEpochMillis(createdAtLong)
     } else {
-        errorMessages << "Missing or invalid createdAt/first_seen_date"
+        def firstSeenLong = parseLongSafe(record.first_seen_date)
+        if (firstSeenLong != null) {
+            createdMillis = firstSeenLong
+        } else {
+            errorMessages << "Missing or invalid createdAt/first_seen_date"
+        }
     }
 
     def outputRec = [

@@ -7,6 +7,7 @@
     { "name": "sender_id", "type": ["null", "string"], "default": null },
     { "name": "recipient_id", "type": ["null", "string"], "default": null },
     { "name": "transaction_amount", "type": ["null", "double"], "default": null },
+    { "name": "status", "type": ["null", "string"], "default": null },
     {
       "name": "created_at",
       "type": ["null", {

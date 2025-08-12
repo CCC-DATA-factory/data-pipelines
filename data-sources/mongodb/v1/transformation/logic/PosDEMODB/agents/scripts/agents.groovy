@@ -47,7 +47,7 @@ records.eachWithIndex { rec, idx ->
     def parentId = rec.reseller?.toString() ?: null
     def shopName = null
     def joinedAt = null
-    def joinedRaw = rec.created_at ?: rec.first_seen_date
+    def joinedRaw = rec.first_seen_date ?: rec.created_at
 
     if (id == null) errs << '_id is required'
     if (firstName == null) errs << 'first_name is required'

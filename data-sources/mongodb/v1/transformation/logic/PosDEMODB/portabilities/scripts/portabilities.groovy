@@ -42,21 +42,45 @@ long nowMillis = ZonedDateTime.now(tunisZone).toInstant().toEpochMilli()
 List outputRecords = []
 List failureRecords = []
 
+def parseLongSafe = { obj ->
+    try {
+        return obj?.toString()?.toLong()
+    } catch (_) {
+        return null
+    }
+}
+long utcToTunisLocalEpochMillis(long utcEpochMillis) {
+    ZoneId tunisZone = ZoneId.of("Africa/Tunis")
+
+    // Convert UTC millis to Instant
+    Instant instant = Instant.ofEpochMilli(utcEpochMillis)
+
+    // Get the ZonedDateTime in Tunisia timezone for that instant
+    ZonedDateTime tunisZoned = instant.atZone(tunisZone)
+
+    // Get local date/time components
+    LocalDateTime tunisLocalDateTime = tunisZoned.toLocalDateTime()
+
+    // Now interpret that local date/time as if it were UTC, get the epoch millis
+    long shiftedMillis = tunisLocalDateTime.atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+    return shiftedMillis
+}
+
 records.each { record ->
     def errorMessages = []
     def createdMillis = null
 
     // Handle createdAt with fallback to first_seen_date
-    if (record.createdAt instanceof Number) {
-        def utcMillis = record.createdAt as Long
-        createdMillis = ZonedDateTime.ofInstant(Instant.ofEpochMilli(utcMillis), ZoneOffset.UTC)
-                            .withZoneSameInstant(tunisZone)
-                            .toInstant().toEpochMilli()
-    } else if (record.first_seen_date instanceof Number) {
-        createdMillis = record.first_seen_date as Long
+    if (record.createdAt != null && parseLongSafe(record.createdAt) != null) {
+        def utcMillis = parseLongSafe(record.createdAt)
+        createdMillis = utcToTunisLocalEpochMillis(utcMillis)
+    } else if (record.first_seen_date != null && parseLongSafe(record.first_seen_date) != null) {
+        createdMillis = parseLongSafe(record.first_seen_date)
     } else {
         errorMessages << "Missing or invalid createdAt/first_seen_date"
     }
+
 
     // Required fields validations
     if (!record._id) errorMessages << "_id missing"

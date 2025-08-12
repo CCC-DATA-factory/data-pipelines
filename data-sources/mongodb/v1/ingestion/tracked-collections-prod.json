@@ -149,6 +149,11 @@
         "database_name": "PosDEMODB",
         "collection_name": "regions",
         "Analysis_related": "False"
+      },
+      {
+        "database_name": "PosDEMODB",
+        "collection_name": "sims",
+        "Analysis_related": "True"
       }
     ],
 "last_update" : "2022-02-28T14:45:12.385+00:00"

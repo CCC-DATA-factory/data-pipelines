@@ -43,6 +43,32 @@ def collName = flowFile.getAttribute("collection_name") ?: "unknown_collection"
 List transformed = []
 List invalidSummary = []
 
+def parseLongSafe = { obj ->
+    try {
+        return obj?.toString()?.toLong()
+    } catch (_) {
+        return null
+    }
+}
+long utcToTunisLocalEpochMillis(long utcEpochMillis) {
+    ZoneId tunisZone = ZoneId.of("Africa/Tunis")
+
+    // Convert UTC millis to Instant
+    Instant instant = Instant.ofEpochMilli(utcEpochMillis)
+
+    // Get the ZonedDateTime in Tunisia timezone for that instant
+    ZonedDateTime tunisZoned = instant.atZone(tunisZone)
+
+    // Get local date/time components
+    LocalDateTime tunisLocalDateTime = tunisZoned.toLocalDateTime()
+
+    // Now interpret that local date/time as if it were UTC, get the epoch millis
+    long shiftedMillis = tunisLocalDateTime.atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+    return shiftedMillis
+}
+
+
 records.eachWithIndex { rec, idx ->
 
     List errors = []
@@ -66,23 +92,30 @@ records.eachWithIndex { rec, idx ->
 
     // Parse createdAt
     Long createdAt = null
+
     if (errors.isEmpty()) {
         if (rec.createdAt instanceof Number) {
-            createdAt = (rec.createdAt as Number).longValue()
+            def createdAtLong = parseLongSafe(rec.createdAt)
+            if (createdAtLong != null) {
+                createdAt = utcToTunisLocalEpochMillis(createdAtLong)
+            }
         } else if (rec.createdAt instanceof String) {
-            try {
-                createdAt = Instant.parse(rec.createdAt).toEpochMilli()
-            } catch (_) {
-                createdAt = null
+            // Try parsing string as long millis only (no ISO parsing)
+            def parsedMillis = parseLongSafe(rec.createdAt)
+            if (parsedMillis != null) {
+                createdAt = utcToTunisLocalEpochMillis(parsedMillis)
             }
         }
+
         if (createdAt == null && rec.first_seen_date instanceof Number) {
-            createdAt = (rec.first_seen_date as Number).longValue()
+            createdAt = parseLongSafe(rec.first_seen_date)
         }
+
         if (createdAt == null) {
             errors << "createdAt is invalid or missing"
         }
     }
+
 
     // Build transformed output
     def out = [
@@ -90,6 +123,7 @@ records.eachWithIndex { rec, idx ->
         sender_id          : rec.sender ?: null,
         recipient_id       : rec.recipient ?: null,
         transaction_amount : (rec.transactionAmount?.amount as Number)?.toDouble(),
+        status             : rec.status ?: null,
         created_at         : createdAt ?: nowMillis,
         first_seen_date    : rec.first_seen_date ?: null,
         ingestion_date     : rec.ingestion_date ?: null,

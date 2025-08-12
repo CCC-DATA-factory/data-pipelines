@@ -41,6 +41,32 @@ long nowMillis = ZonedDateTime.now(tunisZone).toInstant().toEpochMilli()
 List finalRecords = []
 List failureRecords = []
 
+
+def parseLongSafe = { obj ->
+    try {
+        return obj?.toString()?.toLong()
+    } catch (_) {
+        return null
+    }
+}
+long utcToTunisLocalEpochMillis(long utcEpochMillis) {
+    ZoneId tunisZone = ZoneId.of("Africa/Tunis")
+
+    // Convert UTC millis to Instant
+    Instant instant = Instant.ofEpochMilli(utcEpochMillis)
+
+    // Get the ZonedDateTime in Tunisia timezone for that instant
+    ZonedDateTime tunisZoned = instant.atZone(tunisZone)
+
+    // Get local date/time components
+    LocalDateTime tunisLocalDateTime = tunisZoned.toLocalDateTime()
+
+    // Now interpret that local date/time as if it were UTC, get the epoch millis
+    long shiftedMillis = tunisLocalDateTime.atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+    return shiftedMillis
+}
+
 records.eachWithIndex { record, idx ->
     def error = null
 
@@ -60,14 +86,14 @@ records.eachWithIndex { record, idx ->
 
     // Compute creationMillis
     def creationMillis = null
-    if (record.creation_date != null && record.creation_date.toString().isLong()) {
-        def utcMillis = record.creation_date as Long
-        creationMillis = ZonedDateTime.ofInstant(Instant.ofEpochMilli(utcMillis), ZoneOffset.UTC)
-                                .withZoneSameInstant(tunisZone)
-                                .toInstant().toEpochMilli()
+
+    if (record.creation_date != null && parseLongSafe(record.creation_date) != null) {
+        def utcMillis = parseLongSafe(record.creation_date)
+        creationMillis = utcToTunisLocalEpochMillis(utcMillis)
     } else if (record.first_seen_date != null) {
-        creationMillis = record.first_seen_date as Long
+        creationMillis = parseLongSafe(record.first_seen_date)
     }
+
 
 
 
@@ -81,7 +107,7 @@ records.eachWithIndex { record, idx ->
         cin_recto_path      : record.cin_recto_path ?: null,
         cin_verso_path      : record.cin_verso_path ?: null,
         city                : record.city ?: null,
-        creation_date       : creationMillis,
+        creation_date       : creationMillis ?: null,
         email               : record.email ?: null,
         first_name          : record.first_name ?: null,
         gender              : record.gender ?: null,

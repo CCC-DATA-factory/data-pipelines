@@ -50,6 +50,32 @@ def parseDateMillis = { str ->
     }
 }
 
+def parseLongSafe = { obj ->
+    try {
+        return obj?.toString()?.toLong()
+    } catch (_) {
+        return null
+    }
+}
+long utcToTunisLocalEpochMillis(long utcEpochMillis) {
+    ZoneId tunisZone = ZoneId.of("Africa/Tunis")
+
+    // Convert UTC millis to Instant
+    Instant instant = Instant.ofEpochMilli(utcEpochMillis)
+
+    // Get the ZonedDateTime in Tunisia timezone for that instant
+    ZonedDateTime tunisZoned = instant.atZone(tunisZone)
+
+    // Get local date/time components
+    LocalDateTime tunisLocalDateTime = tunisZoned.toLocalDateTime()
+
+    // Now interpret that local date/time as if it were UTC, get the epoch millis
+    long shiftedMillis = tunisLocalDateTime.atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+    return shiftedMillis
+}
+
+
 records.eachWithIndex { record, idx ->
     def errors = []
 
@@ -68,17 +94,23 @@ records.eachWithIndex { record, idx ->
 
     // Parse createdAt
     Long createdAtMillis = null
+
     if (record.createdAt instanceof String) {
-        createdAtMillis = parseDateMillis(record.createdAt)
-    }
-    if (!createdAtMillis && record.first_seen_date instanceof Number) {
+        def parsed = parseLongSafe(record.createdAt)
+        if (parsed != null) {
+            createdAtMillis = utcToTunisLocalEpochMillis(parsed)
+        }
+    } 
+
+    if (createdAtMillis == null && record.first_seen_date instanceof Number) {
         createdAtMillis = (record.first_seen_date as Number).longValue()
     }
-    if (!createdAtMillis) {
+
+    if (createdAtMillis == null) {
         createdAtMillis = nowTunisMillis
     }
 
-    def dt = Instant.ofEpochMilli(createdAtMillis).atZone(ZoneId.of("Africa/Tunis"))
+
 
     def transformed = [
         id                  : id,
