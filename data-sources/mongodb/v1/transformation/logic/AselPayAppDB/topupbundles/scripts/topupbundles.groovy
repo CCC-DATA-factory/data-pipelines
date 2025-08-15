@@ -68,12 +68,23 @@ long utcToTunisLocalEpochMillis(long utcEpochMillis) {
 }
 
 records.eachWithIndex { record, idx ->
+    // Skip records for retailer_id = 663c99b32ce2f417b74e8ed5
+    if (record.retailer?.toString() == "663c99b32ce2f417b74e8ed5") {
+        log.info("Skipping record ${record._id} because retailer_id is blocked")
+        return 
+    }
+
     def errors = []
 
-    // Validate required fields
     def id = (record._id instanceof String) ? record._id : null
     def retailer = (record.retailer instanceof String) ? record.retailer : null
+
+    // Replace bundle_id if it matches old value
     def bundle = (record.bundle instanceof String) ? record.bundle : null
+    if (bundle == "63b6e87de630dcebb3adb548") {
+        bundle = "6439189a72db535a33a6af8b"
+    }
+
     def sim = (record.SIM instanceof String) ? record.SIM : null
     def shop = (record.shopName ?: "Unknown").toString()
 

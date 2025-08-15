@@ -77,8 +77,12 @@ long utcToTunisLocalEpochMillis(long utcEpochMillis) {
 
 
 records.eachWithIndex { record, idx ->
+    if (record.retailer?.toString() == "663c99b32ce2f417b74e8ed5") {
+            log.info("Skipping record ${record._id} because retailer_id is blocked")
+            return 
+        }
     def errors = []
-
+    
     def id = (record._id instanceof String) ? record._id : null
     def retailer = (record.retailer instanceof String) ? record.retailer : null
     def sim = (record.SIM instanceof String) ? record.SIM : null
