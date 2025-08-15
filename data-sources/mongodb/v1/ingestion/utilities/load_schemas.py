@@ -5,7 +5,7 @@ import sys
 import json
 
 # ——— CONFIGURATION ———
-REGISTRY_URL = "http://102.207.250.54:5544/apis/registry/v2"
+REGISTRY_URL = "http://nifi:5544/apis/registry/v2"
 RAW_GROUP_ID = "asel-schemas.ingestion-raw-schemas"
 STAGING_GROUP_ID = "asel-schemas.ingestion-staging-schemas"
 SCHEMA_DIR = os.path.join(os.path.dirname(__file__), "..", "schemas")
