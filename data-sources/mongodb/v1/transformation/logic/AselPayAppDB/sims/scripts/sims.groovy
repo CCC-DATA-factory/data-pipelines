@@ -96,9 +96,6 @@ records.each { record ->
     } else if (record.activation_date instanceof Number) {
         // Directly convert activation_date number to long and then Tunisian millis
         activationMillis = utcToTunisLocalEpochMillis(record.activation_date as Long)
-    } else if (record.first_seen_date instanceof Number) {
-        // Use first_seen_date as is
-        activationMillis = record.first_seen_date as Long
     }
 
     if (activationMillis == null) {
